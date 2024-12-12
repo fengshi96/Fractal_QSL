@@ -155,7 +155,23 @@ def calculate_lorenz_number(thermal_cond, particle_cond, T):
 
 
 
+def flux_sampler(modified_lattice, num_fluxes, seed=None):
+    if seed is not None:
+        np.random.seed(seed)  
 
+    num_plaquettes = len(modified_lattice.plaquettes)
+    num_fluxes = num_fluxes  # Replace with the desired number of +1 fluxes
+
+    # Generate a base array of -1 (no flux)
+    target_flux = np.full(num_plaquettes, -1, dtype=np.int8)
+
+    indices_with_flux = np.random.choice(
+        num_plaquettes, num_fluxes, replace=False
+    )
+
+    target_flux[indices_with_flux] = 1
+
+    return target_flux
 
 def main(total, cmdargs):
     if total != 1:
@@ -163,14 +179,18 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(28, return_coloring=True)
-    level = 8   # 1 is a triangle
+    level = 7   # 1 is a triangle
     modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
     # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=800, fractal_level=level, open_bc=False)  # 424
 
-    target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
+    # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
+
+    total_plaquettes = len(modified_lattice.plaquettes)
+    flux_filling = 0.0
+    target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434)
+    print("Total plaquettes = ", total_plaquettes)
+    print("Total sites = ", modified_lattice.n_vertices)
  
-    # ujk_init = np.full(modified_lattice.n_edges, -1)
-    # ujk = ujk_from_fluxes(modified_lattice,target_flux,ujk_init) # ujk_from_fluxes find_flux_sector
 
     method = 'dense'
     data = diag_maj(modified_lattice, coloring_solution, target_flux, method=method)
@@ -178,7 +198,7 @@ def main(total, cmdargs):
 
     # Example usage
     eigenvalues = maj_energies  # Example eigenvalues
-    temperatures = np.linspace(0.01, 0.1, 100)  # Temperature range
+    temperatures = np.linspace(0.001, 0.1, 100)  # Temperature range
 
     thermal_conductivities = []
     particle_conductivities = []
@@ -195,17 +215,17 @@ def main(total, cmdargs):
 
     # Plot results
     plt.figure(figsize=(10, 6))
-    plt.plot(temperatures, lorenz_numbers, label="Lorenz Number")
-    plt.axhline(np.pi**2 / 3, color='r', linestyle='--', label="Ideal L_0")
+    # plt.plot(temperatures, lorenz_numbers, label="Lorenz Number")
+    # plt.axhline(np.pi**2 / 3, color='r', linestyle='--', label="Ideal L_0")
     plt.plot(temperatures, thermal_conductivities/temperatures, label="thermal conductivities")
-    plt.plot(temperatures, particle_conductivities, label="particle conductivities")
+    # plt.plot(temperatures, particle_conductivities, label="particle conductivities")
     plt.xlabel("Temperature")
-    plt.xscale('log')
+    # plt.xscale('log')
     # plt.yscale('log')
     plt.ylabel("Lorenz Number")
     plt.legend()
     plt.title("Wiedemann-Franz Law Verification")
-    plt.show()
+    plt.savefig("thermal.pdf", dpi=300,bbox_inches='tight')
 
 
 

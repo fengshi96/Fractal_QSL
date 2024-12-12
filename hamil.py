@@ -344,7 +344,7 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(20, return_coloring=True)
-    level = 5   # 1 is a triangle
+    level = 3   # 1 is a triangle
     # modified_lattice, coloring_solution = Sierpinski(level, remove_corner=False)
     modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=4, fractal_level=level, open_bc=False)  # 424
     # print(modified_lattice.vertices)

@@ -24,6 +24,7 @@ from hamil import amorphous_Sierpinski
 from scipy.sparse.linalg import spsolve
 from matplotlib.colors import Normalize
 import matplotlib.animation as animation
+from geometric_disorder_lattice import regular_apollonius
 from PIL import Image
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
@@ -562,14 +563,15 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(40, return_coloring=True)
-    level = 8   # 1 is a triangle
+    level = 8  # 1 is a triangle
     modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
-    # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=4434, init_points=80, fractal_level=level, open_bc=False)  # 444 4434
+    # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=4434, init_points=3, fractal_level=level, open_bc=False)  # 444 4434
+    # modified_lattice, coloring_solution = regular_apollonius(init_length=60, fractal_level=level)
 
     # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
     
     total_plaquettes = len(modified_lattice.plaquettes)
-    flux_filling = 0.5
+    flux_filling = 0.1
     target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434)
     print("Total plaquettes = ", total_plaquettes)
     print("Total sites = ", modified_lattice.n_vertices)
@@ -586,9 +588,9 @@ def main(total, cmdargs):
     ground_state = np.abs(data['eigenvectors'][:, len(data['eigenvectors'])//2])**2
     # site_index = get_closest_site_to_center(modified_lattice)
     site_index = 0
-    perturbed_state = perturb_ground_state(ground_state, site_index, perturbation_strength=0.3)
+    perturbed_state = perturb_ground_state(ground_state, site_index, perturbation_strength=100) #0.3
 
-    total_time = 10000000000000000
+    total_time = 10000000000000000 # 10000000000000000
     nframes = 50
     fps = nframes // 10 # total_time // nframes
     times = np.linspace(0, total_time, nframes)

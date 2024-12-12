@@ -225,6 +225,7 @@ def iterative_fractal_disorder(lattice, n_iterations):
     # Initialize uniform probability distribution
     probability_distribution = np.ones(lattice.n_vertices) / lattice.n_vertices
 
+    print(f"Lattice size is {lattice.n_vertices} before fractal insertion")
     for i in range(n_iterations):
         # Log current state
         print(f"After {i}-th iteration, current lattice size is {lattice.n_vertices}")

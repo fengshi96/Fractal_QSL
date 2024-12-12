@@ -165,6 +165,24 @@ def diag_maj(modified_lattice, coloring_solution, target_flux, method='dense', k
 
     return data
 
+def flux_sampler(modified_lattice, num_fluxes, seed=None):
+    if seed is not None:
+        np.random.seed(seed)  
+
+    num_plaquettes = len(modified_lattice.plaquettes)
+    num_fluxes = num_fluxes  # Replace with the desired number of +1 fluxes
+
+    # Generate a base array of -1 (no flux)
+    target_flux = np.full(num_plaquettes, -1, dtype=np.int8)
+
+    indices_with_flux = np.random.choice(
+        num_plaquettes, num_fluxes, replace=False
+    )
+
+    target_flux[indices_with_flux] = 1
+
+    return target_flux
+
 
 def complex_fluxes_to_labels(fluxes: np.ndarray) -> np.ndarray:
     """Remaps fluxes from the set {1,-1, +i, -i} to labels in the form {0,1,2,3} for plotting.
@@ -256,20 +274,23 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(20, return_coloring=True)
-    level = 5   # 1 is a triangle
+    level = 3   # 1 is a triangle
     modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
     # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=7, fractal_level=level, open_bc=False)  # 424
 
-    target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
-    # target_flux = np.array([ground_state_ansatz(p.n_sides) for p in modified_lattice.plaquettes], dtype=np.int8)
-    
-    all_sides = np.array([p.n_sides for p in modified_lattice.plaquettes])
+    # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
+        
+    total_plaquettes = len(modified_lattice.plaquettes)
+    flux_filling = 0.6
+    target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434)
+    print("Total plaquettes = ", total_plaquettes)
+    print("Total sites = ", modified_lattice.n_vertices)
     
     method = 'dense'
     data = diag_maj(modified_lattice, coloring_solution, target_flux, method=method)
     maj_energies = data['energies']
     ipr_values = data['ipr'][0, :]
-    assert(1 not in data['fluxes'])
+    # assert(1 not in data['fluxes'])
 
     print(data['fluxes'])
     print(complex_fluxes_to_labels(data['fluxes']))
@@ -285,7 +306,7 @@ def main(total, cmdargs):
         ax1.axes.yaxis.set_visible(False)
         plot_edges(modified_lattice, ax= ax1,labels=coloring_solution, directions=data['ujk'])
         # plot_plaquettes(modified_lattice, ax=ax1, labels = complex_fluxes_to_labels(data['fluxes']), color_scheme=np.array(['w','lightgrey','wheat', 'thistle']))
-        plot_plaquettes(modified_lattice, ax=ax1, labels = fluxes_to_labels(data['fluxes']), color_scheme=np.array(['w','lightgrey','wheat', 'thistle']))
+        plot_plaquettes(modified_lattice, ax=ax1, labels = fluxes_to_labels(data['fluxes']), color_scheme=np.array(['lightgrey','w','wheat', 'thistle']))
         plot_vertex_indices(modified_lattice, ax= ax1)
 
         # find n-gons

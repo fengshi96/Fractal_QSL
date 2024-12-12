@@ -253,25 +253,51 @@ def perform_fit(gap_ratios, bins=50, fit_type="poisson"):
     return midpoints, hist, fitted_density, optimal_scale
 
 
+def flux_sampler(modified_lattice, num_fluxes, seed=None):
+    if seed is not None:
+        np.random.seed(seed)  
+
+    num_plaquettes = len(modified_lattice.plaquettes)
+    num_fluxes = num_fluxes  # Replace with the desired number of +1 fluxes
+
+    # Generate a base array of -1 (no flux)
+    target_flux = np.full(num_plaquettes, -1, dtype=np.int8)
+
+    indices_with_flux = np.random.choice(
+        num_plaquettes, num_fluxes, replace=False
+    )
+
+    target_flux[indices_with_flux] = 1
+
+    return target_flux
+
+
+
 def main(total, cmdargs):
     if total != 1:
         print (" ".join(str(x) for x in cmdargs))
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(20, return_coloring=True)
-    level = 0   # 1 is a triangle
+    level = 2   # 1 is a triangle
     # modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
-    # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=2000, fractal_level=level, open_bc=False)  # 424
-    # modified_lattice, coloring_solution = regular_apollonius(init_length=20, fractal_level=level)
-    modified_lattice, coloring_solution = honeycomb_lattice(400, return_coloring=True)
+    # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=80, fractal_level=level, open_bc=False)  # 424
+    modified_lattice, coloring_solution = regular_apollonius(init_length=20, fractal_level=level)
+    # modified_lattice, coloring_solution = honeycomb_lattice(400, return_coloring=True)
 
-    target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
+    # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
     
+    total_plaquettes = len(modified_lattice.plaquettes)
+    flux_filling = 0.4
+    target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434)
+    print("Total plaquettes = ", total_plaquettes)
+    print("Total sites = ", modified_lattice.n_vertices)
+
     method = 'dense'
     data = diag_maj(modified_lattice, coloring_solution, target_flux, method=method)
     maj_energies = data['energies']
     # maj_states = data['eigenvectors']
-    assert(1 not in data['fluxes'])
+    # assert(1 not in data['fluxes'])
 
     
     gap_ratios = compute_gap_ratios(maj_energies)
@@ -283,7 +309,7 @@ def main(total, cmdargs):
     hist, edges = np.histogram(gap_ratios, bins=bins, density=True)
     # Midpoints for plotting
     midpoints = (edges[:-1] + edges[1:]) / 2
-    fit_type="goe"
+    fit_type="poisson"
     midpoints, hist, fitted_density, optimal_scale = perform_fit(
         gap_ratios[30:], bins=bins, fit_type=fit_type
     )
