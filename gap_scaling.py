@@ -23,7 +23,7 @@ def main(total, cmdargs):
     all_Gaps = {}
     Seeds = [432] #[432, 444, 676]
     lowest_level = 2
-    highest_level = 9
+    highest_level = 7
     Ns = np.zeros(highest_level - lowest_level + 1, dtype=int)  # the number of sites at each level
     for s, seed in enumerate(Seeds):
         Gaps = np.zeros(highest_level - lowest_level + 1)

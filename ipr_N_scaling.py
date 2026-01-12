@@ -88,7 +88,7 @@ def main(total, cmdargs):
     ax[1].tick_params(axis = 'both', which = 'both', direction='in', labelsize=18)
 
     # plt.show()
-    plt.savefig("IPR_Scaling.pdf", dpi=300, bbox_inches='tight')
+    plt.savefig("IPR_Scaling_N.pdf", dpi=300, bbox_inches='tight')
 
 
 

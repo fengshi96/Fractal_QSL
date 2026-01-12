@@ -228,8 +228,9 @@ def iterative_fractal_disorder(lattice, n_iterations):
     print(f"Lattice size is {lattice.n_vertices} before fractal insertion")
     for i in range(n_iterations):
         # Log current state
-        print(f"After {i}-th iteration, current lattice size is {lattice.n_vertices}")
         lattice = vertices_to_polygon(lattice)
+        print(f"After {i}-th iteration, current lattice size is {lattice.n_vertices}")
+
 
 
     return lattice
@@ -251,14 +252,14 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(20, return_coloring=True)
-    n_iterations = 2   # 1 is a triangle
+    n_iterations = 0   # 1 is a triangle
     
-    modified_lattice = honeycomb_lattice(20, return_coloring=False)
+    modified_lattice, color_solution = regular_apollonius(10, fractal_level=0)
     
     # modified_lattice = iterative_geometric_disorder(modified_lattice, n_iterations, batch_size=20, alpha = 5)
-    modified_lattice = iterative_fractal_disorder(modified_lattice, n_iterations)
-    color_solution = color_lattice(modified_lattice)
-    target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
+    # modified_lattice = iterative_fractal_disorder(modified_lattice, n_iterations)
+    # color_solution = color_lattice(modified_lattice)
+    # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
     # target_flux = np.array([ground_state_ansatz(p.n_sides) for p in modified_lattice.plaquettes], dtype=np.int8)
     
     
@@ -272,7 +273,7 @@ def main(total, cmdargs):
     fig, (ax1, ax2) = plt.subplots(1, 2,  figsize=(12,6))  # 1 row 1 col
     ax1.axes.xaxis.set_visible(False)
     ax1.axes.yaxis.set_visible(False)
-    plot_edges(modified_lattice, ax= ax1, color = 'black', lw=0.1)
+    plot_edges(modified_lattice, ax= ax1, labels=color_solution, lw=2)
     # plot_plaquettes(modified_lattice, ax=ax1, labels = complex_fluxes_to_labels(data['fluxes']), color_scheme=np.array(['w','lightgrey','deepskyblue', 'wheat']))
     # plot_plaquettes(modified_lattice, ax=ax1, labels = fluxes_to_labels(data['fluxes']), color_scheme=np.array(['w','lightgrey','deepskyblue', 'wheat']))
     # plot_vertex_indices(modified_lattice, ax= ax1)

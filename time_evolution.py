@@ -13,7 +13,7 @@ from koala.flux_finder import fluxes_from_ujk, fluxes_to_labels, ujk_from_fluxes
 import koala.hamiltonian as ham
 from koala.lattice import Lattice
 from koala import chern_number as cn
-from koala.example_graphs import honeycomb_lattice
+from koala.example_graphs import honeycomb_lattice, n_ladder
 from matplotlib.colors import TwoSlopeNorm
 from scipy.stats import gaussian_kde
 from scipy import sparse
@@ -26,6 +26,7 @@ from matplotlib.colors import Normalize
 import matplotlib.animation as animation
 from geometric_disorder_lattice import regular_apollonius
 from PIL import Image
+from honeycomb_wf_dist import majorana_hamiltonian_with_nnn, sparse_majorana_hamiltonian_with_nnn
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 
@@ -163,7 +164,10 @@ def diag_maj(modified_lattice, coloring_solution, target_flux, method='dense', k
     ujk = ujk_from_fluxes(modified_lattice,target_flux,ujk_init) # ujk_from_fluxes find_flux_sector
     fluxes = fluxes_from_ujk(modified_lattice, ujk, real=True)  #fluxes_from_bonds  fluxes_from_ujk
 
-    maj_ham = ham.majorana_hamiltonian(modified_lattice, coloring_solution, ujk)
+    if coloring_solution is not None:
+        maj_ham = ham.majorana_hamiltonian(modified_lattice, coloring_solution, ujk)
+    else:
+        maj_ham = ham.majorana_hamiltonian(modified_lattice, None, ujk)
     
     if method == 'dense':
         maj_energies, eigenvectors = scipy.linalg.eigh(maj_ham)
@@ -189,6 +193,8 @@ def diag_maj(modified_lattice, coloring_solution, target_flux, method='dense', k
 
 
     return data
+
+
 
 
 def majorana_hamiltonian_with_nnn(
@@ -529,7 +535,7 @@ def create_time_evolution_animation(lattice, wavefunctions, total_time, output_g
             cmap=cmap,
             s=100,
             vmin=0,
-            vmax=0.01
+            vmax=0.5
         )
         print('updating frame = ', frame)
         t = frame * (total_time / total_frames)
@@ -563,32 +569,39 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(40, return_coloring=True)
-    level = 8  # 1 is a triangle
-    modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
+    level = 0  # 1 is a triangle
+    # modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
     # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=4434, init_points=3, fractal_level=level, open_bc=False)  # 444 4434
     # modified_lattice, coloring_solution = regular_apollonius(init_length=60, fractal_level=level)
+    modified_lattice = n_ladder(100)
 
     # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
     
     total_plaquettes = len(modified_lattice.plaquettes)
     flux_filling = 0.1
-    target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434)
+    target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434) #
     print("Total plaquettes = ", total_plaquettes)
     print("Total sites = ", modified_lattice.n_vertices)
+    print(target_flux)
 
 
     method = 'dense'
-    data = diag_maj(modified_lattice, coloring_solution, target_flux, method=method)
-    # data = diag_maj_honeycomb(modified_lattice, coloring_solution, target_flux, method=method, nnn=0.15)
+    data = diag_maj(modified_lattice, coloring_solution=None, target_flux=target_flux, method=method)
+    # data = diag_maj_honeycomb(modified_lattice, coloring_solution, target_flux=target_flux, method=method, nnn=0.1)
     maj_energies = data['energies']
     maj_states = data['eigenvectors']
     # ipr_values = data['ipr'][0, :]
     # assert(1 not in data['fluxes'])
 
     ground_state = np.abs(data['eigenvectors'][:, len(data['eigenvectors'])//2])**2
-    # site_index = get_closest_site_to_center(modified_lattice)
-    site_index = 0
-    perturbed_state = perturb_ground_state(ground_state, site_index, perturbation_strength=100) #0.3
+    site_index = get_closest_site_to_center(modified_lattice)
+    # site_index = 0
+    perturbed_state = perturb_ground_state(ground_state, site_index, perturbation_strength=100000000000) #0.3
+    print(perturbed_state, max(perturbed_state))
+
+    overlaps = data['eigenvectors'].conj().T @ perturbed_state
+    overlaps_mag_sq = np.abs(overlaps)**2
+
 
     total_time = 10000000000000000 # 10000000000000000
     nframes = 50
@@ -607,8 +620,13 @@ def main(total, cmdargs):
 
 
 
-
-
+    # overlaps
+    plt.figure(figsize=(8,6))
+    plt.scatter(maj_energies, overlaps_mag_sq, color='blue', s=5)
+    plt.xlabel('Energy')
+    plt.ylabel('Overlap magnitude squared')
+    plt.title('Overlap of State with Eigenstates vs. Energy')
+    plt.savefig('toverlap.pdf', dpi=300,bbox_inches='tight')
 
 
 

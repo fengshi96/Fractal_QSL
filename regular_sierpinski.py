@@ -274,14 +274,14 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(20, return_coloring=True)
-    level = 3   # 1 is a triangle
+    level = 6   # 1 is a triangle
     modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
     # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=7, fractal_level=level, open_bc=False)  # 424
 
     # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
         
     total_plaquettes = len(modified_lattice.plaquettes)
-    flux_filling = 0.6
+    flux_filling = 0.0
     target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434)
     print("Total plaquettes = ", total_plaquettes)
     print("Total sites = ", modified_lattice.n_vertices)

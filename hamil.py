@@ -19,7 +19,7 @@ from koala.plotting import plot_edges, plot_vertex_indices, plot_lattice, plot_p
 from koala.graph_utils import vertices_to_polygon, make_dual
 from koala.graph_color import color_lattice, edge_color
 from koala.flux_finder import fluxes_from_bonds, fluxes_from_ujk, fluxes_to_labels, ujk_from_fluxes, n_to_ujk_flipped, find_flux_sector
-from koala.example_graphs import make_amorphous, ground_state_ansatz, single_plaquette, honeycomb_lattice
+from koala.example_graphs import make_amorphous, ground_state_ansatz, single_plaquette, honeycomb_lattice, n_ladder
 import koala.hamiltonian as ham
 from koala.lattice import Lattice, cut_boundaries
 from koala import chern_number as cn
@@ -254,7 +254,10 @@ def diag_maj(modified_lattice, coloring_solution, target_flux, method='dense', k
     ujk = ujk_from_fluxes(modified_lattice,target_flux,ujk_init) # ujk_from_fluxes find_flux_sector
     fluxes = fluxes_from_ujk(modified_lattice, ujk, real=True)  #fluxes_from_bonds  fluxes_from_ujk
 
-    maj_ham = ham.majorana_hamiltonian(modified_lattice, coloring_solution, ujk)
+    if coloring_solution is not None:
+        maj_ham = ham.majorana_hamiltonian(modified_lattice, coloring_solution, ujk)
+    else:
+        maj_ham = ham.majorana_hamiltonian(modified_lattice, None, ujk)
     
     if method == 'dense':
         maj_energies, eigenvectors = scipy.linalg.eigh(maj_ham)
@@ -283,6 +286,24 @@ def diag_maj(modified_lattice, coloring_solution, target_flux, method='dense', k
 
     return data
 
+
+def flux_sampler(modified_lattice, num_fluxes, seed=None):
+    if seed is not None:
+        np.random.seed(seed)  
+
+    num_plaquettes = len(modified_lattice.plaquettes)
+    num_fluxes = num_fluxes  # Replace with the desired number of +1 fluxes
+
+    # Generate a base array of -1 (no flux)
+    target_flux = np.full(num_plaquettes, -1, dtype=np.int8)
+
+    indices_with_flux = np.random.choice(
+        num_plaquettes, num_fluxes, replace=False
+    )
+
+    target_flux[indices_with_flux] = 1
+
+    return target_flux
 
 def complex_fluxes_to_labels(fluxes: np.ndarray) -> np.ndarray:
     """
@@ -343,10 +364,11 @@ def main(total, cmdargs):
         print (" ".join(str(x) for x in cmdargs))
         raise ValueError('redundent args')
     
-    # modified_lattice, coloring_solution = honeycomb_lattice(20, return_coloring=True)
-    level = 3   # 1 is a triangle
-    # modified_lattice, coloring_solution = Sierpinski(level, remove_corner=False)
-    modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=4, fractal_level=level, open_bc=False)  # 424
+    # modified_lattice, coloring_solution = honeycomb_lattice(10, return_coloring=True)
+    # modified_lattice = n_ladder(100)
+    level = 7   # 1 is a triangle
+    modified_lattice, coloring_solution = Sierpinski(level, remove_corner=False)
+    # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=4, fractal_level=level, open_bc=False)  # 424
     # print(modified_lattice.vertices)
     # print(modified_lattice.edges)
 
@@ -354,19 +376,27 @@ def main(total, cmdargs):
     #     [ground_state_ansatz(p.n_sides) for p in modified_lattice.plaquettes],
     #     dtype=np.int8)
     
-    target_flux = np.array(
-        [(-1) for p in modified_lattice.plaquettes],
-        dtype=np.int8)
-    
+    # target_flux = np.array(
+    #     [(-1) for p in modified_lattice.plaquettes],
+    #     dtype=np.int8)
+
+    total_plaquettes = len(modified_lattice.plaquettes)
+    flux_filling = 0.0
+    target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 8) #66668, 8
+    print("Total plaquettes = ", total_plaquettes)
+    print("Total sites = ", modified_lattice.n_vertices)
+    print(target_flux)
+
+
     all_sides = np.array([p.n_sides for p in modified_lattice.plaquettes])
     # print(all_sides)
     # print(target_flux)
     
     method = 'dense'
-    data = diag_maj(modified_lattice, coloring_solution, target_flux, method=method)
+    data = diag_maj(modified_lattice, coloring_solution=None, target_flux=target_flux, method=method)
     maj_energies = data['energies']
     ipr_values = data['ipr'][0, :]
-    assert(1 not in data['fluxes'])
+    # assert(1 not in data['fluxes'])
     print(data['fluxes'])
     print(complex_fluxes_to_labels(data['fluxes']))
 
@@ -378,25 +408,26 @@ def main(total, cmdargs):
 
 
 
-    # -----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
     # plot lattice
-    if level <= 8:  # level > 8 will be too dense to plot
-        fig, (ax1, ax2) = plt.subplots(1, 2,  figsize=(12,6))  # 1 row 1 col
-        ax1.axes.xaxis.set_visible(False)
-        ax1.axes.yaxis.set_visible(False)
-        plot_edges(modified_lattice, ax= ax1,labels=coloring_solution, directions=data['ujk'])
-        # plot_plaquettes(modified_lattice, ax=ax1, labels = complex_fluxes_to_labels(data['fluxes']), color_scheme=np.array(['w','lightgrey','deepskyblue', 'wheat']))
-        plot_plaquettes(modified_lattice, ax=ax1, labels = fluxes_to_labels(data['fluxes']), color_scheme=np.array(['w','lightgrey','deepskyblue', 'wheat']))
-        # plot_vertex_indices(modified_lattice, ax= ax1)
-        # find n-gons
-        all_sides = np.array([p.n_sides for p in modified_lattice.plaquettes])
-        # print(all_sides)
-        counts = np.bincount(all_sides)
-        ax2.bar(np.arange(len(counts))[3:], counts[3:])
-        # ax2.set_xscale('log')
-        # ax2.set_yscale('log')
-        ax2.set_title('Distribution of n-gons in lattice')
-        plt.savefig("test_ham_figure.pdf", dpi=900,bbox_inches='tight')
+    # if level <= 8:  # level > 8 will be too dense to plot
+    #     fig, (ax1, ax2) = plt.subplots(1, 2,  figsize=(12,6))  # 1 row 1 col
+    #     ax1.axes.xaxis.set_visible(False)
+    #     ax1.axes.yaxis.set_visible(False)
+    #     plot_edges(modified_lattice, ax= ax1,labels=coloring_solution, directions=data['ujk'])
+    #     plot_edges(modified_lattice, ax= ax1, directions=data['ujk'])
+    #     # plot_plaquettes(modified_lattice, ax=ax1, labels = complex_fluxes_to_labels(data['fluxes']), color_scheme=np.array(['w','lightgrey','deepskyblue', 'wheat']))
+    #     plot_plaquettes(modified_lattice, ax=ax1, labels = fluxes_to_labels(data['fluxes']), color_scheme=np.array(['w','lightgrey','deepskyblue', 'wheat']))
+    #     # plot_vertex_indices(modified_lattice, ax= ax1)
+    #     # find n-gons
+    #     all_sides = np.array([p.n_sides for p in modified_lattice.plaquettes])
+    #     # print(all_sides)
+    #     counts = np.bincount(all_sides)
+    #     ax2.bar(np.arange(len(counts))[3:], counts[3:])
+    #     # ax2.set_xscale('log')
+    #     # ax2.set_yscale('log')
+    #     ax2.set_title('Distribution of n-gons in lattice')
+    #     plt.savefig("test_ham_figure.pdf", dpi=900,bbox_inches='tight')
 
 
 
@@ -404,7 +435,7 @@ def main(total, cmdargs):
 
     if method != 'sparse':
         # plot energy levels
-        fig, ax = plt.subplots(1, 3,  figsize=(30,10))  # 1 row 1 col
+        fig, ax = plt.subplots(1, 3,  figsize=(30,8))  # 1 row 1 col
         ax[0].set_title('Energy Levels')
         ax[0].scatter(range(len(maj_energies)), maj_energies)
         ax[0].hlines(y=0, xmin=0, xmax=len(maj_energies), linestyles='dashed')
@@ -421,7 +452,7 @@ def main(total, cmdargs):
         ax[1].plot(energy_range, dos_values, lw=2)
         ax[1].set_xlabel('Energy', fontsize=18)
         ax[1].set_ylabel('DOS', fontsize=18)
-        ax[1].set_title('Density of States (DOS)')
+        ax[1].set_title(r"$\rm DOS$")
         ax[1].tick_params(axis = 'both', which = 'both', direction='in', labelsize=18)
 
         # Plot the IPR as a function of energy
