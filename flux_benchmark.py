@@ -11,7 +11,7 @@ import scipy
 import primme
 import random
 from collections import Counter
-
+from ipr_all import regular_Sierpinski, flux_sampler
 from koala.pointsets import uniform
 from koala.voronization import generate_lattice
 from koala.example_graphs import higher_coordination_number_example
@@ -185,13 +185,13 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(20, return_coloring=True)
-    level = 3   # 1 is a triangle
+    level = 6   # 1 is a triangle
     modified_lattice, coloring_solution = Sierpinski(level, remove_corner=False)
     # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=444, init_points=6, fractal_level=level, open_bc=False)  # 424
     # print(modified_lattice.vertices)
     # print(modified_lattice.edges)
 
-    flux_configs = np.array((len(modified_lattice.n_plaquettes)))
+    # flux_configs = np.array((len(modified_lattice.n_plaquettes)))
     target_flux = np.array(
         [ground_state_ansatz(p.n_sides) for p in modified_lattice.plaquettes],
         dtype=np.int8)
@@ -199,6 +199,11 @@ def main(total, cmdargs):
     # target_flux = np.array(
     #     [(-1) for p in modified_lattice.plaquettes],
     #     dtype=np.int8)
+
+    # modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
+    # total_plaquettes = len(modified_lattice.plaquettes)
+    # flux_filling = 0.5
+    # target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434) 
     
     all_sides = np.array([p.n_sides for p in modified_lattice.plaquettes])
     print(all_sides)

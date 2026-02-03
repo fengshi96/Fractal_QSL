@@ -7,10 +7,29 @@ import numpy as np
 from scipy.optimize import curve_fit
 from koala.example_graphs import ground_state_ansatz
 from hamil import Sierpinski, diag_maj
+from ipr_all import regular_Sierpinski
 
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 
+
+def flux_sampler(modified_lattice, num_fluxes, seed=None):
+    if seed is not None:
+        np.random.seed(seed)  
+
+    num_plaquettes = len(modified_lattice.plaquettes)
+    num_fluxes = num_fluxes  # Replace with the desired number of +1 fluxes
+
+    # Generate a base array of -1 (no flux)
+    target_flux = np.full(num_plaquettes, -1, dtype=np.int8)
+
+    indices_with_flux = np.random.choice(
+        num_plaquettes, num_fluxes, replace=False
+    )
+
+    target_flux[indices_with_flux] = 1
+
+    return target_flux
 
 
 def main(total, cmdargs):
@@ -19,20 +38,27 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
 
     # main codes
-    lowest_level = 3
-    highest_level = 7
+    lowest_level = 4
+    highest_level = 8
     qmax = 10  # IPR level q of I_q
-    Nlist = np.array([1 / (3**level+1) for level in range(lowest_level, highest_level+1)])  # list of log(# sites)
+    # Nlist = np.array([1 / (3**level+1) for level in range(lowest_level, highest_level+1)])  # scale with 1/N
+    Nlist = np.array([1 / (2**level - 1) for level in range(lowest_level, highest_level+1)]) # scale of linear size L = 2^level - 1
     IPR = np.zeros((len(Nlist), qmax-1))  # 4 cols for q = 2,3,4,5
     for i, level in enumerate(range(lowest_level, highest_level+1)):
         modified_lattice, coloring_solution = Sierpinski(level, remove_corner=True)
         target_flux = np.array(
-            [ground_state_ansatz(p.n_sides) for p in modified_lattice.plaquettes],dtype=np.int8)
+        [ground_state_ansatz(p.n_sides) for p in modified_lattice.plaquettes],
+        dtype=np.int8)
         method = 'sparse'
         data = diag_maj(modified_lattice, coloring_solution, target_flux, method=method, max_ipr_level=qmax)
         ipr_values = data['ipr']
-        print(level, 3**level, "\n IPRs for different qs are: \n", ipr_values)
+        print(level, 2**level - 1, "\n IPRs for different qs are: \n", ipr_values)
         IPR[i, :] = ipr_values[:, 0]
+
+        # modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=True)
+
+
+
 
     fig, ax = plt.subplots(1, 2,  figsize=(12,6))  # 1 row 1 col
     """
@@ -70,7 +96,7 @@ def main(total, cmdargs):
 
     ax[0].set_xscale('log')
     ax[0].set_yscale('log')
-    ax[0].set_xlabel(r"$1/N$", fontsize=18)
+    ax[0].set_xlabel(r"$1/L$", fontsize=18)
     ax[0].set_ylabel(r"$I_q$", fontsize=18)
 
 
@@ -79,7 +105,7 @@ def main(total, cmdargs):
     a, b, c = quadratic_fitting(Qs, tau_q); print("fitted a = ", a)
     print("a,b,c=",a,b,c )
     ax[1].plot(Qs, -a*Qs**2 + b*Qs + c, color = 'black', linestyle='--', lw=1.5)
-    # ax[1].plot(Qs, 2*(Qs-1) + a*Qs*(Qs-1) + c, color = 'black', linestyle='--', lw=1.5)
+    # ax[1].plot(Qs, -a*Qs**2 + b*Qs + c, color = 'black', linestyle='--', lw=1.5)
     ax[1].plot(Qs, tau_q, marker='+', color = 'black', ms = 20, linestyle='')
 
     ax[1].set_xticks([i for i in np.arange(qmax) + 1])

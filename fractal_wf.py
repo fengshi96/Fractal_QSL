@@ -191,7 +191,7 @@ def main(total, cmdargs):
     # modified_lattice, coloring_solution = regular_apollonius(init_length=7, fractal_level=level) # 21 7
 
     total_hexagon = len(modified_lattice.plaquettes)
-    flux_filling = 0.5
+    flux_filling = 0.0
     target_flux = flux_sampler(modified_lattice, int(total_hexagon * flux_filling), seed = None)
     print("Total hexagon = ", total_hexagon)
     print("Total sites = ", modified_lattice.n_vertices)
@@ -199,11 +199,11 @@ def main(total, cmdargs):
     data = diag_maj(modified_lattice, coloring_solution, target_flux, method='dense')
     maj_energies = data['energies']
     # ModeIndx=len(maj_energies) // 2 + 0
-    ModeIndx = len(maj_energies) // 2 + (data['num_zero_energy_levels'] // 2) + 863
+    ModeIndx = len(maj_energies) // 2 + (data['num_zero_energy_levels'] // 2) + 0
     print("Energy is at index", ModeIndx, "with value", maj_energies[ModeIndx])
-    psi = np.abs(data['eigenvectors'][:, ModeIndx])**2
+    psi = np.abs(data['eigenvectors'][:, ModeIndx])**2 
 
-    fig, ax = plot_wavefunction_scatter(modified_lattice, psi, vmin=0.0, vmax=np.max(np.abs(psi) ** 2) / 5)
+    fig, ax = plot_wavefunction_scatter(modified_lattice, psi, vmin=0.0, vmax=np.max(np.abs(psi) ** 2) / 5) #vmax=np.max(np.abs(psi) ** 2) / 5
     plt.savefig("fractal_wf.pdf", dpi=300, bbox_inches='tight')
 
 
