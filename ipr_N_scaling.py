@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 from koala.example_graphs import ground_state_ansatz
 from hamil import Sierpinski, diag_maj
 from ipr_all import regular_Sierpinski
-
+from fractal_wf import diag_maj as diag_maj_wf
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 
@@ -39,21 +39,41 @@ def main(total, cmdargs):
 
     # main codes
     lowest_level = 4
-    highest_level = 8
-    qmax = 10  # IPR level q of I_q
+    highest_level = 9
+    qmax = 5  # IPR level q of I_q
     # Nlist = np.array([1 / (3**level+1) for level in range(lowest_level, highest_level+1)])  # scale with 1/N
-    Nlist = np.array([1 / (2**level - 1) for level in range(lowest_level, highest_level+1)]) # scale of linear size L = 2^level - 1
+    Nlist = np.array([1 / (2**level) for level in range(lowest_level, highest_level+1)]) # scale of linear size L = 2^level - 1
     IPR = np.zeros((len(Nlist), qmax-1))  # 4 cols for q = 2,3,4,5
     for i, level in enumerate(range(lowest_level, highest_level+1)):
-        modified_lattice, coloring_solution = Sierpinski(level, remove_corner=True)
-        target_flux = np.array(
-        [ground_state_ansatz(p.n_sides) for p in modified_lattice.plaquettes],
-        dtype=np.int8)
-        method = 'sparse'
-        data = diag_maj(modified_lattice, coloring_solution, target_flux, method=method, max_ipr_level=qmax)
+        # modified_lattice, coloring_solution = Sierpinski(level, remove_corner=True)
+        modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=True)
+
+        # target_flux = np.array(
+        # [ground_state_ansatz(p.n_sides) for p in modified_lattice.plaquettes],
+        # dtype=np.int8)
+
+        total_hexagon = len(modified_lattice.plaquettes)
+        flux_filling = 0.0
+        target_flux = flux_sampler(modified_lattice, int(total_hexagon * flux_filling), seed = 2822)
+
+
+        # method = 'sparse'
+        # data = diag_maj(modified_lattice, coloring_solution, target_flux, method=method, max_ipr_level=qmax)
+        # ipr_values = data['ipr']
+        # print(level, 2**level, "\n IPRs for different qs are: \n", ipr_values)
+        # IPR[i, :] = ipr_values[:, 0]
+
+
+
+        method = 'dense'
+        data = diag_maj_wf(modified_lattice, coloring_solution, target_flux, method=method, max_ipr_level=qmax)
         ipr_values = data['ipr']
-        print(level, 2**level - 1, "\n IPRs for different qs are: \n", ipr_values)
-        IPR[i, :] = ipr_values[:, 0]
+        maj_energies = data['energies']
+        ModeIndx = len(maj_energies) // 2 + 1# (data['num_zero_energy_levels'] // 2) 
+        # ModeIndx = 0
+        print("number of zero energy levels:", data['num_zero_energy_levels'])
+        print(level, 2**level, "\n IPRs for different qs are: \n", ipr_values[:, ModeIndx])
+        IPR[i, :] = ipr_values[:, ModeIndx]
 
         # modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=True)
 
@@ -101,11 +121,12 @@ def main(total, cmdargs):
 
 
     Qs = np.arange(1, qmax+1, 1)
-    # a = quadratic_fitting2(Qs, tau_q); print("fitted Gamma = ", a)
-    a, b, c = quadratic_fitting(Qs, tau_q); print("fitted a = ", a)
-    print("a,b,c=",a,b,c )
-    ax[1].plot(Qs, -a*Qs**2 + b*Qs + c, color = 'black', linestyle='--', lw=1.5)
+    a, b = fitting(Qs, tau_q); print("fitted Gamma = ", a)
+    print("a,b =",a,b)
+    # a, b, c = quadratic_fitting(Qs, tau_q); print("fitted a = ", a)
+    # print("a,b,c=",a,b,c )
     # ax[1].plot(Qs, -a*Qs**2 + b*Qs + c, color = 'black', linestyle='--', lw=1.5)
+    ax[1].plot(Qs, a*Qs + b, color = 'black', linestyle='--', lw=1.5)
     ax[1].plot(Qs, tau_q, marker='+', color = 'black', ms = 20, linestyle='')
 
     ax[1].set_xticks([i for i in np.arange(qmax) + 1])
