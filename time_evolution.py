@@ -96,9 +96,9 @@ def gen_bonds(n):
         return bonds_n
     
 
-def flux_sampler(modified_lattice, num_fluxes, seed=None):
+def flux_sampler(modified_lattice, num_fluxes, seed=None, even_flip_only=False):
     if seed is not None:
-        np.random.seed(seed)  
+        np.random.seed(seed)
 
     num_plaquettes = len(modified_lattice.plaquettes)
     num_fluxes = num_fluxes  # Replace with the desired number of +1 fluxes
@@ -106,9 +106,22 @@ def flux_sampler(modified_lattice, num_fluxes, seed=None):
     # Generate a base array of -1 (no flux)
     target_flux = np.full(num_plaquettes, -1, dtype=np.int8)
 
-    indices_with_flux = np.random.choice(
-        num_plaquettes, num_fluxes, replace=False
-    )
+    if even_flip_only:
+        eligible_indices = [
+            i for i, p in enumerate(modified_lattice.plaquettes)
+            if (len(p.vertices) % 2 == 0)
+        ]
+        if num_fluxes > len(eligible_indices):
+            raise ValueError(
+                f"num_fluxes ({num_fluxes}) exceeds eligible even plaquettes ({len(eligible_indices)})."
+            )
+        indices_with_flux = np.random.choice(
+            eligible_indices, num_fluxes, replace=False
+        )
+    else:
+        indices_with_flux = np.random.choice(
+            num_plaquettes, num_fluxes, replace=False
+        )
 
     target_flux[indices_with_flux] = 1
 
@@ -486,7 +499,7 @@ def get_closest_site_to_center(lattice):
     return closest_site_index
 
 
-def create_time_evolution_animation(lattice, wavefunctions, total_time, output_gif, target_flux=None, cmap="Purples", fps=5):
+def create_time_evolution_animation(lattice, wavefunctions, total_time, output_gif, target_flux=None, cmap="Purples", fps=5, vmax=0.01):
     """
     Create a simple animation of wavefunction evolution.
 
@@ -535,7 +548,7 @@ def create_time_evolution_animation(lattice, wavefunctions, total_time, output_g
             cmap=cmap,
             s=100,
             vmin=0,
-            vmax=0.5
+            vmax=vmax
         )
         print('updating frame = ', frame)
         t = frame * (total_time / total_frames)
@@ -569,17 +582,30 @@ def main(total, cmdargs):
         raise ValueError('redundent args')
     
     # modified_lattice, coloring_solution = honeycomb_lattice(40, return_coloring=True)
-    level = 0  # 1 is a triangle
-    # modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
+    level = 8  # 1 is a triangle
+    modified_lattice, coloring_solution = regular_Sierpinski(level, remove_corner=False)
     # modified_lattice, coloring_solution = amorphous_Sierpinski(Seed=4434, init_points=3, fractal_level=level, open_bc=False)  # 444 4434
     # modified_lattice, coloring_solution = regular_apollonius(init_length=60, fractal_level=level)
-    modified_lattice = n_ladder(100)
+    # modified_lattice = n_ladder(100)
 
     # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
     
     total_plaquettes = len(modified_lattice.plaquettes)
-    flux_filling = 0.1
-    target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434) #
+    flux_filling = 0.5
+    even_flip_only = True
+    if even_flip_only:
+        even_plaquettes = sum(
+            1 for p in modified_lattice.plaquettes if (len(p.vertices) % 2 == 0)
+        )
+        num_fluxes = int(even_plaquettes * flux_filling)
+    else:
+        num_fluxes = int(total_plaquettes * flux_filling)
+    target_flux = flux_sampler(
+        modified_lattice,
+        num_fluxes,
+        seed=4434,
+        even_flip_only=even_flip_only
+    )
     print("Total plaquettes = ", total_plaquettes)
     print("Total sites = ", modified_lattice.n_vertices)
     print(target_flux)
@@ -594,8 +620,8 @@ def main(total, cmdargs):
     # assert(1 not in data['fluxes'])
 
     ground_state = np.abs(data['eigenvectors'][:, len(data['eigenvectors'])//2])**2
-    site_index = get_closest_site_to_center(modified_lattice)
-    # site_index = 0
+    # site_index = get_closest_site_to_center(modified_lattice)
+    site_index = 0
     perturbed_state = perturb_ground_state(ground_state, site_index, perturbation_strength=100000000000) #0.3
     print(perturbed_state, max(perturbed_state))
 
@@ -603,8 +629,8 @@ def main(total, cmdargs):
     overlaps_mag_sq = np.abs(overlaps)**2
 
 
-    total_time = 10000000000000000 # 10000000000000000
-    nframes = 50
+    total_time = 1000 # 10000000000000000
+    nframes = 100
     fps = nframes // 10 # total_time // nframes
     times = np.linspace(0, total_time, nframes)
     
@@ -616,7 +642,16 @@ def main(total, cmdargs):
     # plot_dist_smooth(modified_lattice,loc_landscape, vmin=-0.08, vmax=0.1, s=100, cmap='bwr', label="effective confinement potential", filename="time_evo.pdf")
 
     print(f"Wavefunctions shape: {psi_t.shape}")
-    create_time_evolution_animation(modified_lattice, psi_t.T, total_time = total_time, cmap="Purples", target_flux=None, output_gif="time_evolution.gif", fps=fps)
+    create_time_evolution_animation(
+        modified_lattice,
+        psi_t.T,
+        total_time=total_time,
+        cmap="Purples",
+        target_flux=None,
+        output_gif="time_evolution.gif",
+        fps=fps,
+        vmax=0.01
+    )
 
 
 
