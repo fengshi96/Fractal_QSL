@@ -499,7 +499,7 @@ def get_closest_site_to_center(lattice):
     return closest_site_index
 
 
-def create_time_evolution_animation(lattice, wavefunctions, total_time, output_gif, target_flux=None, cmap="Purples", fps=5, vmax=0.01):
+def create_time_evolution_animation(lattice, wavefunctions, total_time, output_gif, target_flux=None, cmap="Purples", fps=5, vmax=0.01, size_min=30, size_max=200):
     """
     Create a simple animation of wavefunction evolution.
 
@@ -518,7 +518,16 @@ def create_time_evolution_animation(lattice, wavefunctions, total_time, output_g
 
     # Initialize the plot
     fig, ax = plt.subplots(figsize=(6, 6))
-    scatter = ax.scatter(x, y, c=np.zeros_like(x), cmap=cmap, s=100, vmin=0, vmax=0.05)
+    scatter = ax.scatter(
+        x, y,
+        c=np.zeros_like(x),
+        cmap=cmap,
+        s=size_min,
+        vmin=0,
+        vmax=0.05,
+        edgecolors='none',
+        linewidths=0
+    )
     plot_edges(lattice, color='black', lw=0.5, alpha=0.2)
     if target_flux is not None:
         plot_plaquettes(lattice, ax=ax, labels = fluxes_to_labels(target_flux), color_scheme=np.array(['lightgrey','w','deepskyblue', 'wheat']))
@@ -538,22 +547,33 @@ def create_time_evolution_animation(lattice, wavefunctions, total_time, output_g
         sorted_y = y[sorted_indices]
         sorted_wf = wf[sorted_indices]
 
-        # ax.clear()
+        ax.clear()
+        plot_edges(lattice, ax=ax, color='black', lw=0.5, alpha=0.2)
+        if target_flux is not None:
+            plot_plaquettes(lattice, ax=ax, labels=fluxes_to_labels(target_flux), color_scheme=np.array(['lightgrey','w','deepskyblue', 'wheat']))
         ax.axis("equal")
         ax.axis("off")
         
+        max_wf = np.max(sorted_wf)
+        if max_wf > 0:
+            sizes = size_min + (size_max - size_min) * (sorted_wf / max_wf)
+        else:
+            sizes = np.full_like(sorted_wf, size_min, dtype=float)
+
         scatter = ax.scatter(
             sorted_x, sorted_y,
             c=sorted_wf,
             cmap=cmap,
-            s=100,
+            s=sizes,
             vmin=0,
-            vmax=vmax
+            vmax=vmax,
+            edgecolors='none',
+            linewidths=0
         )
         print('updating frame = ', frame)
         t = frame * (total_time / total_frames)
         print(np.round(t, 2))
-        time_text.set_text(f"t={np.round(t, 2)}")
+        ax.text(0.02, 0.98, f"t={np.round(t, 2)}", transform=ax.transAxes, fontsize=12, verticalalignment="top")
         return scatter
 
     plt.tight_layout(pad=0)
@@ -592,7 +612,7 @@ def main(total, cmdargs):
     
     total_plaquettes = len(modified_lattice.plaquettes)
     flux_filling = 0.5
-    even_flip_only = True
+    even_flip_only = False
     if even_flip_only:
         even_plaquettes = sum(
             1 for p in modified_lattice.plaquettes if (len(p.vertices) % 2 == 0)
@@ -629,7 +649,7 @@ def main(total, cmdargs):
     overlaps_mag_sq = np.abs(overlaps)**2
 
 
-    total_time = 1000 # 10000000000000000
+    total_time = 800 # 10000000000000000
     nframes = 100
     fps = nframes // 10 # total_time // nframes
     times = np.linspace(0, total_time, nframes)
@@ -646,10 +666,12 @@ def main(total, cmdargs):
         modified_lattice,
         psi_t.T,
         total_time=total_time,
-        cmap="Purples",
+        cmap="ocean_r",
         target_flux=None,
         output_gif="time_evolution.gif",
         fps=fps,
+        size_min=5,
+        size_max=500,
         vmax=0.01
     )
 

@@ -334,9 +334,9 @@ def sparse_majorana_hamiltonian_with_nnn(
     return ham_sparse.tocsr()
 
 
-def flux_sampler(modified_lattice, num_fluxes, seed=None):
+def flux_sampler(modified_lattice, num_fluxes, seed=None, even_flip_only=False):
     if seed is not None:
-        np.random.seed(seed)  
+        np.random.seed(seed)
 
     num_plaquettes = len(modified_lattice.plaquettes)
     num_fluxes = num_fluxes  # Replace with the desired number of +1 fluxes
@@ -344,9 +344,26 @@ def flux_sampler(modified_lattice, num_fluxes, seed=None):
     # Generate a base array of -1 (no flux)
     target_flux = np.full(num_plaquettes, -1, dtype=np.int8)
 
-    indices_with_flux = np.random.choice(
-        num_plaquettes, num_fluxes, replace=False
-    )
+    if even_flip_only:
+        eligible_indices = [
+            i for i, p in enumerate(modified_lattice.plaquettes)
+            if (len(p.vertices) % 2 == 0)
+        ]
+        if num_fluxes > len(eligible_indices):
+            raise ValueError(
+                f"num_fluxes ({num_fluxes}) exceeds eligible even plaquettes ({len(eligible_indices)})."
+            )
+        if num_fluxes == 0:
+            return target_flux
+        indices_with_flux = np.random.choice(
+            eligible_indices, num_fluxes, replace=False
+        ).astype(int)
+    else:
+        if num_fluxes == 0:
+            return target_flux
+        indices_with_flux = np.random.choice(
+            num_plaquettes, num_fluxes, replace=False
+        ).astype(int)
 
     target_flux[indices_with_flux] = 1
 
@@ -414,7 +431,7 @@ def main(total, cmdargs):
 
 
     Ipr = []
-    List = [0,1,2,3,4,5]
+    List = [0,1,2,3,4,5,6,7,8]
     cmap = cm.viridis
     norm = colors.Normalize(vmin=min(List), vmax=max(List))
     # fig, ax = plt.subplots(1, 1, figsize=(7, 6))
@@ -428,18 +445,36 @@ def main(total, cmdargs):
     filtered_ipr_list = [] 
     filtered_ipr_list_b = []   # exclude low energy IPR
     filtered_ipr_list_c = []   # only low energy IPR
+    valid_levels = []
 
     for l in List:
         L = l
         print(L)
+        if l < 1:
+            print("Skipping l < 1 for Sierpinski (requires level >= 1).")
+            continue
         # modified_lattice = n_ladder(L)    # print(modified_lattice.vertices)
         # total_plaquettes = len(modified_lattice.plaquettes)
-        # modified_lattice, coloring_solution = regular_Sierpinski(l, remove_corner=False)
-        modified_lattice, coloring_solution = regular_apollonius(init_length=3, fractal_level=l)
+        modified_lattice, coloring_solution = regular_Sierpinski(l, remove_corner=False)
+        # modified_lattice, coloring_solution = regular_apollonius(init_length=3, fractal_level=l)
         total_plaquettes = len(modified_lattice.plaquettes)
+        valid_levels.append(l)
 
         flux_filling = 0.5
-        target_flux = flux_sampler(modified_lattice, int(total_plaquettes * flux_filling), seed = 4434)  # 4434
+        even_flip_only = True
+        if even_flip_only:
+            even_plaquettes = sum(
+                1 for p in modified_lattice.plaquettes if (len(p.vertices) % 2 == 0)
+            )
+            num_fluxes = int(even_plaquettes * flux_filling)
+        else:
+            num_fluxes = int(total_plaquettes * flux_filling)
+        target_flux = flux_sampler(
+            modified_lattice,
+            num_fluxes,
+            seed=4434,
+            even_flip_only=even_flip_only
+        )
 
 
         data = diag_maj(modified_lattice, coloring_solution=None, target_flux=target_flux, method='dense')
@@ -465,9 +500,9 @@ def main(total, cmdargs):
         ax.scatter(
             filtered_energies,
             filtered_ipr,
-            c=this_color,   
+            color=this_color,
             s=2,
-            alpha=0.5            
+            alpha=0.5
         )
 
 
@@ -568,7 +603,7 @@ def main(total, cmdargs):
     ax.set_xlabel(r'$E$', fontsize=26)
     ax.set_ylabel(r'${\rm IPR}(E,N)$', fontsize=26)
     ax.set_yscale('log')
-    ax.set_ylim(ymax=1e-1, ymin=1e-5)
+    ax.set_ylim(ymax=1e-0, ymin=1e-5)
     # ax.set_xlim(energy_range_min, energy_range_max)
     # ax.set_xticks([0.0, 0.4, 0.8, 1.2])
     # ax.set_xticklabels([r'$0.0$', r'$1.6$', r'$3.2$', r'$4.8$'], fontsize=26)
@@ -583,66 +618,61 @@ def main(total, cmdargs):
     std_ipr_L = np.array([np.std(arr)  for arr in filtered_ipr_list_b])
 
     
-    axins = inset_axes(
-        ax,
-        width="100%",    # 30% of parent axes width
-        height="100%",   # 30% of parent axes height
-        bbox_to_anchor=(0.48, 0.18, 0.50, 0.40),  # [x0, y0, width, height]
-        bbox_transform=ax.transAxes              # interpret those numbers in ax coords
-        # loc='lower left'                          # anchor that bbox at its lower‐left
-    )
+    # axins = inset_axes(
+    #     ax,
+    #     width="100%",    # 30% of parent axes width
+    #     height="100%",   # 30% of parent axes height
+    #     bbox_to_anchor=(0.48, 0.18, 0.50, 0.40),  # [x0, y0, width, height]
+    #     bbox_transform=ax.transAxes              # interpret those numbers in ax coords
+    #     # loc='lower left'                          # anchor that bbox at its lower‐left
+    # )
 
-    axins.tick_params(
-        axis='x',
-        which='both',
-        bottom=True,    # turn off bottom ticks
-        top=False,        # turn on top ticks
-        labelbottom=True,
-        labeltop=False    # draw the tick‐labels on top
-    )
+    # axins.tick_params(
+    #     axis='x',
+    #     which='both',
+    #     bottom=True,    # turn off bottom ticks
+    #     top=False,        # turn on top ticks
+    #     labelbottom=True,
+    #     labeltop=False    # draw the tick‐labels on top
+    # )
 
+    # L_arr    = np.array(valid_levels, dtype=float)
+    # x_inset  = 1.0 / 3 ** L_arr
 
+    # # 3) Plot average with error bars
+    # axins.errorbar(
+    #     x_inset,
+    #     avg_ipr_L,
+    #     yerr=std_ipr_L ,
+    #     fmt='o',
+    #     color='black',
+    #     ecolor='gray',
+    #     elinewidth=1,
+    #     capsize=3,
+    #     markersize=4
+    # )
 
+    # axins.scatter(x_inset, filtered_ipr_list_c, marker='s', color='red', s = 15)
 
+    # # 4) (Optional) Use log‐scale on x if L spans decades
+    # axins.set_xscale('log')
+    # axins.set_yscale('log')
+    # axins.set_ylim(ymax=1e-1, ymin=1e-4)
 
-
-    L_arr    = np.array(List, dtype=float)
-    x_inset  = 1.0 / 3 ** L_arr
-
-    # 3) Plot average with error bars
-    axins.errorbar(
-        x_inset,
-        avg_ipr_L,
-        yerr=std_ipr_L ,
-        fmt='o',
-        color='black',
-        ecolor='gray',
-        elinewidth=1,
-        capsize=3,
-        markersize=4
-    )
-
-    axins.scatter(x_inset, filtered_ipr_list_c, marker='s', color='red', s = 15)
-
-    # 4) (Optional) Use log‐scale on x if L spans decades
-    axins.set_xscale('log')
-    axins.set_yscale('log')
-    axins.set_ylim(ymax=1e-1, ymin=1e-4)
-
-    # 5) Tidy up inset formatting
-    axins.set_xlabel(r"$1/N$", fontsize=26)
-    axins.set_ylabel(r"${\rm IPR}(N)$", fontsize=26)
-    axins.tick_params(axis='both', labelsize=26, direction='in')
+    # # 5) Tidy up inset formatting
+    # axins.set_xlabel(r"$1/N$", fontsize=26)
+    # axins.set_ylabel(r"${\rm IPR}(N)$", fontsize=26)
+    # axins.tick_params(axis='both', labelsize=26, direction='in')
    
 
     sm = cm.ScalarMappable(norm=norm, cmap=cmap)
-    sm.set_array([])    # dummy
+    sm.set_array(np.array(valid_levels, dtype=float))
     cbar = fig.colorbar(
         sm, cax=cax,
-        ticks=[1000,2000,3000],
+        ticks=[1000,2000,3000, 4000, 5000, 6000],
         orientation='vertical'
     )
-    cbar.set_ticklabels(["1","2","3"])
+    cbar.set_ticklabels(["1","2","3", "4", "5", "6"])
     cbar.set_label(r"$N/10^3$", fontsize=26, labelpad=10)
     cbar.ax.tick_params(labelsize=26)
 
