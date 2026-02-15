@@ -35,14 +35,14 @@ def plot_three_panel(t, lr, lt, ll, output_path: Path):
     fig, axes = plt.subplots(3, 1, figsize=(6, 4), sharex=True)
 
     # Panel-wise y-axis calibration with a small buffer below 0
-    y_min = -0.003
+    y_min = -0.002
     y_ticks_a = [0.00, 0.02, 0.04, 0.06]  # shown as 0,2,4,6 x 10^-2
-    y_ticks_b = [0.00, 0.02, 0.05]  # shown as 0,1,3,5 x 10^-2
-    y_ticks_c = [0.00, 0.02, 0.04, 0.06]  # shown as 0,2,4,6 x 10^-2
+    y_ticks_b = [0.00, 0.01, 0.02]  # shown as 0,1,3,5 x 10^-2
+    y_ticks_c = [0.00, 0.02, 0.04]  # shown as 0,2,4,6 x 10^-2
 
     y_labels_a = [r"$0$", r"$2$", r"$4$", r"$6$"]
-    y_labels_b = [r"$0$", r"$2$", r"$4$"]
-    y_labels_c = [r"$0$", r"$2$", r"$4$", r"$6$"]
+    y_labels_b = [r"$0$", r"$1$", r"$2$"]
+    y_labels_c = [r"$0$", r"$2$", r"$4$"]
 
     axes[0].plot(t, lr, lw=1.6)
     axes[0].set_ylabel(r"$\overline{|C_{LR}(t)|^2}$")
@@ -53,6 +53,7 @@ def plot_three_panel(t, lr, lt, ll, output_path: Path):
     axes[1].text(0.98, 0.88, "(b)", transform=axes[1].transAxes, ha="right", va="top")
 
     axes[2].plot(t, ll, lw=1.6, color="tab:green")
+    axes[2].axhline(0.011, color="gray", linestyle="--", linewidth=1.0, alpha=0.8)    # eye-guiding horizontal line for LL panel
     axes[2].set_ylabel(r"$\overline{|C_{LL}(t)|^2}$")
     axes[2].set_xlabel("t")
     axes[2].text(0.98, 0.88, "(c)", transform=axes[2].transAxes, ha="right", va="top")
@@ -64,11 +65,11 @@ def plot_three_panel(t, lr, lt, ll, output_path: Path):
     axes[0].set_yticks(y_ticks_a)
     axes[0].set_yticklabels(y_labels_a)
 
-    axes[1].set_ylim(y_min, 0.052)
+    axes[1].set_ylim(y_min, 0.022)
     axes[1].set_yticks(y_ticks_b)
     axes[1].set_yticklabels(y_labels_b)
 
-    axes[2].set_ylim(y_min, 0.062)
+    axes[2].set_ylim(y_min, 0.052)
     axes[2].set_yticks(y_ticks_c)
     axes[2].set_yticklabels(y_labels_c)
 
@@ -83,8 +84,8 @@ def plot_three_panel(t, lr, lt, ll, output_path: Path):
 
 
 def main():
-    csv_path = Path("avg_absC2_vs_t.csv")
-    out_path = Path("avg_absC2_vs_t_from_data.pdf")
+    csv_path = Path("avg_absC2_vs_t_full_random.csv")
+    out_path = Path("avg_absC2_vs_t_from_data_full_random.pdf")
 
     t, lr, lt, ll = read_correlation_csv(csv_path)
     plot_three_panel(t, lr, lt, ll, out_path)
