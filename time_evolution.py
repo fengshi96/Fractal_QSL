@@ -611,7 +611,7 @@ def main(total, cmdargs):
     # target_flux = np.array([(-1) for p in modified_lattice.plaquettes], dtype=np.int8)
     
     total_plaquettes = len(modified_lattice.plaquettes)
-    flux_filling = 0.5
+    flux_filling = 0.0
     even_flip_only = False
     if even_flip_only:
         even_plaquettes = sum(
