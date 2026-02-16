@@ -37,11 +37,11 @@ def plot_three_panel(t, lr, lt, ll, output_path: Path):
     # Panel-wise y-axis calibration with a small buffer below 0
     y_min = -0.002
     y_ticks_a = [0.00, 0.02, 0.04, 0.06]  # shown as 0,2,4,6 x 10^-2
-    y_ticks_b = [0.00, 0.01, 0.02]  # shown as 0,1,3,5 x 10^-2
+    y_ticks_b = [0.00, 0.02, 0.04]  # shown as 0,1,3,5 x 10^-2
     y_ticks_c = [0.00, 0.02, 0.04]  # shown as 0,2,4,6 x 10^-2
 
     y_labels_a = [r"$0$", r"$2$", r"$4$", r"$6$"]
-    y_labels_b = [r"$0$", r"$1$", r"$2$"]
+    y_labels_b = [r"$0$", r"$2$", r"$4$"]
     y_labels_c = [r"$0$", r"$2$", r"$4$"]
 
     axes[0].plot(t, lr, lw=1.6)
@@ -65,7 +65,7 @@ def plot_three_panel(t, lr, lt, ll, output_path: Path):
     axes[0].set_yticks(y_ticks_a)
     axes[0].set_yticklabels(y_labels_a)
 
-    axes[1].set_ylim(y_min, 0.022)
+    axes[1].set_ylim(y_min, 0.045)
     axes[1].set_yticks(y_ticks_b)
     axes[1].set_yticklabels(y_labels_b)
 
@@ -84,8 +84,8 @@ def plot_three_panel(t, lr, lt, ll, output_path: Path):
 
 
 def main():
-    csv_path = Path("avg_absC2_vs_t_full_random.csv")
-    out_path = Path("avg_absC2_vs_t_from_data_full_random.pdf")
+    csv_path = Path("avg_absC2_vs_t.csv")
+    out_path = Path("avg_absC2_vs_t_from_data.pdf")
 
     t, lr, lt, ll = read_correlation_csv(csv_path)
     plot_three_panel(t, lr, lt, ll, out_path)
