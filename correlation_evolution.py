@@ -284,6 +284,7 @@ def disorder_average_absC2(
     flux_filling: float = 0.5,
     even_flip_only: bool = True,
     unfixed_edge_indices: Optional[Sequence[int]] = None,
+    progress_every: int = 1,
 ) -> np.ndarray:
     """Monte Carlo incoherent sector average of |C_LR(t)|^2 = |G_RL(t)|^2."""
     samples = sample_u(
@@ -300,7 +301,7 @@ def disorder_average_absC2(
         A_u = build_A_from_ujk(lattice, coloring_solution, s.ujk)
         _, absG2 = compute_G_target_for_sector(A_u, times, L, L2, L3, R, orientation_flag)
         acc += absG2
-        if i % max(1, M // 10) == 0 or i == M:
+        if progress_every > 0 and (i % progress_every == 0 or i == M):
             print(f"Processed sector {i}/{M}")
 
     return acc / float(M)
@@ -347,6 +348,7 @@ def disorder_average_three_targets(
     flux_filling: float = 0.5,
     even_flip_only: bool = True,
     unfixed_edge_indices: Optional[Sequence[int]] = None,
+    progress_every: int = 1,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute disorder-averaged |C|^2 for LR, LT, and LL using the same sampled sectors.
@@ -372,7 +374,7 @@ def disorder_average_three_targets(
         acc_lr += abs_lr
         acc_lt += abs_lt
         acc_ll += abs_ll
-        if i % max(1, M // 10) == 0 or i == M:
+        if progress_every > 0 and (i % progress_every == 0 or i == M):
             print(f"Processed sector {i}/{M}")
 
     inv_m = 1.0 / float(M)
@@ -392,7 +394,7 @@ def main() -> None:
 
     # Time grid settings:
     # tmax = maximum evolution time.
-    tmax = 800.0
+    tmax = 800 * 20
     # Nt = number of time points between 0 and tmax (inclusive).
     # Time spacing is dt = tmax / (Nt - 1).
     # Larger Nt => finer time resolution, but higher compute and memory cost.
@@ -451,6 +453,7 @@ def main() -> None:
         flux_filling=flux_filling,
         even_flip_only=even_flip_only,
         unfixed_edge_indices=unfixed_edge_indices,
+        progress_every=1,
     )
 
     out_csv = Path("avg_absC2_vs_t.csv")
