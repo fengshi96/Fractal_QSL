@@ -390,7 +390,7 @@ def main() -> None:
     # M = number of disorder/gauge samples in the incoherent average.
     # We compute avg_u |C(t)|^2 ≈ (1/M) * sum_{s=1..M} |C^{(u_s)}(t)|^2.
     # Larger M => smoother average, but runtime scales roughly linearly with M.
-    M = 100
+    M = 1
 
     # Time grid settings:
     # tmax = maximum evolution time.
@@ -411,7 +411,7 @@ def main() -> None:
     # Sector sampling controls
     # flux_filling controls how many plaquettes are assigned +1 flux in fallback
     # flux-based sampling mode.
-    flux_filling = 0.5
+    flux_filling = 0.0
     # even_flip_only=True means only even-sided plaquettes are eligible for +1
     # flux in fallback sampling (triangles remain fixed at -1).
     even_flip_only = True

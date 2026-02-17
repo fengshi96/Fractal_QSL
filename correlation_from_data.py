@@ -146,12 +146,14 @@ def plot_three_panel(
     print(f"Saved figure to {output_path}")
 
 
+
 def main():
     csv_path = Path("avg_absC2_vs_t.csv")
     out_path = Path("avg_absC2_vs_t_from_data.pdf")
 
     t, lr, lt, ll = read_correlation_csv(csv_path)
     plot_three_panel(t, lr, lt, ll, out_path)
+
 
 
 if __name__ == "__main__":
