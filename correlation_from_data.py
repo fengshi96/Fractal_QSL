@@ -33,6 +33,50 @@ def read_correlation_csv(csv_path: Path):
     return np.array(t), np.array(lr), np.array(lt), np.array(ll)
 
 
+def read_complex_correlation_csv(csv_path: Path):
+    t = []
+    c_lr = []
+    c_lt = []
+    c_ll = []
+
+    with csv_path.open("r", newline="") as f:
+        reader = csv.DictReader(f)
+        required = {
+            "t",
+            "Re_avg_C_LR", "Im_avg_C_LR",
+            "Re_avg_C_LT", "Im_avg_C_LT",
+            "Re_avg_C_LL", "Im_avg_C_LL",
+        }
+        missing = required.difference(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"Missing required columns in complex CSV: {sorted(missing)}")
+
+        for row in reader:
+            t.append(float(row["t"]))
+            c_lr.append(float(row["Re_avg_C_LR"]) + 1j * float(row["Im_avg_C_LR"]))
+            c_lt.append(float(row["Re_avg_C_LT"]) + 1j * float(row["Im_avg_C_LT"]))
+            c_ll.append(float(row["Re_avg_C_LL"]) + 1j * float(row["Im_avg_C_LL"]))
+
+    return np.array(t), np.array(c_lr), np.array(c_lt), np.array(c_ll)
+
+
+def fourier_transform_complex_signal(t: np.ndarray, c: np.ndarray):
+    if len(t) < 2:
+        raise ValueError("Need at least two time points for Fourier transform.")
+
+    dt = float(np.mean(np.diff(t)))
+    if not np.allclose(np.diff(t), dt, rtol=1e-6, atol=1e-12):
+        raise ValueError("Time grid must be uniformly spaced for FFT.")
+
+    n = len(t)
+    freqs = np.fft.fftfreq(n, d=dt)
+    omega = 2.0 * np.pi * freqs
+    c_omega = dt * np.fft.fft(c)
+
+    pos = omega >= 0
+    return omega[pos], c_omega[pos]
+
+
 def plot_three_panel(
     t,
     lr,
@@ -146,13 +190,101 @@ def plot_three_panel(
     print(f"Saved figure to {output_path}")
 
 
+def plot_three_panel_ft(
+    omega,
+    c_lr_w,
+    c_lt_w,
+    c_ll_w,
+    output_path: Path,
+):
+    fig, axes = plt.subplots(3, 1, figsize=(2.5, 6), sharex=True)
+
+    tick_labelsize = 14
+    axis_labelsize = tick_labelsize
+
+    colors = {
+        "lr": "#3B6FB6",
+        "lt": "#E07A5F",
+        "ll": "#81B29A",
+    }
+
+    abs_lr = np.abs(c_lr_w)
+    abs_lt = np.abs(c_lt_w)
+    abs_ll = np.abs(c_ll_w)
+
+    axes[0].plot(
+        omega,
+        abs_lr,
+        linestyle="None",
+        marker="o",
+        markersize=3.0,
+        markerfacecolor="none",
+        markeredgewidth=0.8,
+        color=colors["lr"],
+    )
+    axes[0].set_ylabel(r"$|\tilde{C}_{LR}(\omega)|$", fontsize=axis_labelsize)
+    axes[0].text(0.02, 0.88, "(a)", transform=axes[0].transAxes, ha="left", va="top")
+
+    axes[1].plot(
+        omega,
+        abs_lt,
+        linestyle="None",
+        marker="o",
+        markersize=3.0,
+        markerfacecolor="none",
+        markeredgewidth=0.8,
+        color=colors["lt"],
+    )
+    axes[1].set_ylabel(r"$|\tilde{C}_{LT}(\omega)|$", fontsize=axis_labelsize)
+    axes[1].text(0.02, 0.88, "(b)", transform=axes[1].transAxes, ha="left", va="top")
+
+    axes[2].plot(
+        omega,
+        abs_ll,
+        linestyle="None",
+        marker="o",
+        markersize=3.0,
+        markerfacecolor="none",
+        markeredgewidth=0.8,
+        color=colors["ll"],
+    )
+    axes[2].set_ylabel(r"$|\tilde{C}_{LL}(\omega)|$", fontsize=axis_labelsize)
+    axes[2].set_xlabel(r"$\omega$", fontsize=axis_labelsize)
+    axes[2].text(0.02, 0.88, "(c)", transform=axes[2].transAxes, ha="left", va="top")
+
+    for ax in axes:
+        ax.grid(False)
+        ax.tick_params(axis="both", labelsize=tick_labelsize)
+        ax.set_xlim(0.0, 1.5)
+
+    for ax in axes[:-1]:
+        ax.tick_params(labelbottom=False)
+
+    fig.subplots_adjust(hspace=0.0, left=0.18, right=0.97, top=0.95, bottom=0.12)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    print(f"Saved FT figure to {output_path}")
+
+
 
 def main():
     csv_path = Path("avg_absC2_vs_t.csv")
     out_path = Path("avg_absC2_vs_t_from_data.pdf")
+    complex_csv_candidates = [Path("avg_C_vs_t.csv"), Path("avg_CLR_vs_t.csv")]
+    ft_out_path = Path("avg_C_vs_omega_from_data.pdf")
 
     t, lr, lt, ll = read_correlation_csv(csv_path)
     plot_three_panel(t, lr, lt, ll, out_path)
+
+    complex_csv_path = next((p for p in complex_csv_candidates if p.exists()), None)
+
+    if complex_csv_path is not None:
+        t_c, c_lr, c_lt, c_ll = read_complex_correlation_csv(complex_csv_path)
+        omega, c_lr_w = fourier_transform_complex_signal(t_c, c_lr)
+        _, c_lt_w = fourier_transform_complex_signal(t_c, c_lt)
+        _, c_ll_w = fourier_transform_complex_signal(t_c, c_ll)
+        plot_three_panel_ft(omega, c_lr_w, c_lt_w, c_ll_w, ft_out_path)
+    else:
+        print(f"Complex CSV not found in {complex_csv_candidates}. Skipping FT plot.")
 
 
 

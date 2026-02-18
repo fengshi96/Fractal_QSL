@@ -30,15 +30,14 @@ Physical setup
     C_L3L = - i/sqrt(3).
   A single ORIENTATION flag flips signs of the off-diagonal terms.
 
-Why incoherent disorder/sector average
---------------------------------------
+Why coherent disorder/sector average (this script)
+--------------------------------------------------
 - Unfixed link operators commute with H, so Hilbert space decomposes into
   superselection sectors labeled by u.
-- Corner spin operators are sector-diagonal for the chosen components, so
-  cross-sector interference cancels.
-- Physical correlator is therefore incoherent:
-    avg_u |C_LR(t)|^2 = sum_u p(u) |C_LR^{(u)}(t)|^2,
-  estimated by Monte Carlo samples.
+- Here we estimate the sampled correlator amplitude first, then take norm:
+        C_LR(t) ≈ (1/N_s) * sum_s C_LR^{(u_s)}(t),
+        output = |C_LR(t)|^2.
+    (Likewise for LT and LL.)
 """
 
 from __future__ import annotations
@@ -286,7 +285,7 @@ def disorder_average_absC2(
     unfixed_edge_indices: Optional[Sequence[int]] = None,
     progress_every: int = 1,
 ) -> np.ndarray:
-    """Monte Carlo incoherent sector average of |C_LR(t)|^2 = |G_RL(t)|^2."""
+    """Monte Carlo coherent average: first average C_LR(t), then return |avg C_LR(t)|^2."""
     samples = sample_u(
         M,
         rng_seed,
@@ -296,15 +295,17 @@ def disorder_average_absC2(
         unfixed_edge_indices=unfixed_edge_indices,
     )
 
-    acc = np.zeros_like(times, dtype=float)
+    acc_c = np.zeros_like(times, dtype=np.complex128)
     for i, s in enumerate(samples, start=1):
         A_u = build_A_from_ujk(lattice, coloring_solution, s.ujk)
-        _, absG2 = compute_G_target_for_sector(A_u, times, L, L2, L3, R, orientation_flag)
-        acc += absG2
+        G, _ = compute_G_target_for_sector(A_u, times, L, L2, L3, R, orientation_flag)
+        # C_LR = i * chi_RL * G_RL with chi_RL = +1
+        acc_c += 1j * G
         if progress_every > 0 and (i % progress_every == 0 or i == M):
             print(f"Processed sector {i}/{M}")
 
-    return acc / float(M)
+    avg_c = acc_c / float(M)
+    return np.abs(avg_c) ** 2
 
 
 def time_average_window(times: np.ndarray, y: np.ndarray, t1: float, t2: float) -> float:
@@ -332,6 +333,30 @@ def save_csv_multi(path: Path, times: np.ndarray, avg_lr: np.ndarray, avg_lt: np
             w.writerow([f"{t:.16e}", f"{y_lr:.16e}", f"{y_lt:.16e}", f"{y_ll:.16e}"])
 
 
+def save_csv_complex_multi(
+    path: Path,
+    times: np.ndarray,
+    avg_lr: np.ndarray,
+    avg_lt: np.ndarray,
+    avg_ll: np.ndarray,
+) -> None:
+    with path.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow([
+            "t",
+            "Re_avg_C_LR", "Im_avg_C_LR",
+            "Re_avg_C_LT", "Im_avg_C_LT",
+            "Re_avg_C_LL", "Im_avg_C_LL",
+        ])
+        for t, c_lr, c_lt, c_ll in zip(times, avg_lr, avg_lt, avg_ll):
+            w.writerow([
+                f"{t:.16e}",
+                f"{np.real(c_lr):.16e}", f"{np.imag(c_lr):.16e}",
+                f"{np.real(c_lt):.16e}", f"{np.imag(c_lt):.16e}",
+                f"{np.real(c_ll):.16e}", f"{np.imag(c_ll):.16e}",
+            ])
+
+
 def disorder_average_three_targets(
     times: np.ndarray,
     L: int,
@@ -349,9 +374,12 @@ def disorder_average_three_targets(
     even_flip_only: bool = True,
     unfixed_edge_indices: Optional[Sequence[int]] = None,
     progress_every: int = 1,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Compute disorder-averaged |C|^2 for LR, LT, and LL using the same sampled sectors.
+    Compute coherent disorder average for LR/LT/LL:
+    1) average complex C(t) over sectors, 2) return |average C(t)|^2.
+
+    Uses chi = +1 for all three targets.
     """
     samples = sample_u(
         M,
@@ -362,23 +390,29 @@ def disorder_average_three_targets(
         unfixed_edge_indices=unfixed_edge_indices,
     )
 
-    acc_lr = np.zeros_like(times, dtype=float)
-    acc_lt = np.zeros_like(times, dtype=float)
-    acc_ll = np.zeros_like(times, dtype=float)
+    acc_c_lr = np.zeros_like(times, dtype=np.complex128)
+    acc_c_lt = np.zeros_like(times, dtype=np.complex128)
+    acc_c_ll = np.zeros_like(times, dtype=np.complex128)
 
     for i, s in enumerate(samples, start=1):
         A_u = build_A_from_ujk(lattice, coloring_solution, s.ujk)
-        _, abs_lr = compute_G_target_for_sector(A_u, times, L, L2, L3, R, orientation_flag)
-        _, abs_lt = compute_G_target_for_sector(A_u, times, L, L2, L3, T, orientation_flag)
-        _, abs_ll = compute_G_target_for_sector(A_u, times, L, L2, L3, L, orientation_flag)
-        acc_lr += abs_lr
-        acc_lt += abs_lt
-        acc_ll += abs_ll
+        G_lr, _ = compute_G_target_for_sector(A_u, times, L, L2, L3, R, orientation_flag)
+        G_lt, _ = compute_G_target_for_sector(A_u, times, L, L2, L3, T, orientation_flag)
+        G_ll, _ = compute_G_target_for_sector(A_u, times, L, L2, L3, L, orientation_flag)
+
+        # C_target,L = i * chi_target,L * G_target,L, with chi = +1.
+        acc_c_lr += 1j * G_lr
+        acc_c_lt += 1j * G_lt
+        acc_c_ll += 1j * G_ll
         if progress_every > 0 and (i % progress_every == 0 or i == M):
             print(f"Processed sector {i}/{M}")
 
     inv_m = 1.0 / float(M)
-    return acc_lr * inv_m, acc_lt * inv_m, acc_ll * inv_m
+    avg_c_lr = acc_c_lr * inv_m
+    avg_c_lt = acc_c_lt * inv_m
+    avg_c_ll = acc_c_ll * inv_m
+
+    return np.abs(avg_c_lr) ** 2, np.abs(avg_c_lt) ** 2, np.abs(avg_c_ll) ** 2, avg_c_lr, avg_c_lt, avg_c_ll
 
 
 def main() -> None:
@@ -387,10 +421,10 @@ def main() -> None:
     # Larger level => larger system size and heavier computation.
     level = 8
 
-    # M = number of disorder/gauge samples in the incoherent average.
-    # We compute avg_u |C(t)|^2 ≈ (1/M) * sum_{s=1..M} |C^{(u_s)}(t)|^2.
+    # M = number of disorder/gauge samples in the coherent average.
+    # We compute C(t) ≈ (1/M) * sum_{s=1..M} C^{(u_s)}(t), then output |C(t)|^2.
     # Larger M => smoother average, but runtime scales roughly linearly with M.
-    M = 1
+    M = 100
 
     # Time grid settings:
     # tmax = maximum evolution time.
@@ -411,7 +445,7 @@ def main() -> None:
     # Sector sampling controls
     # flux_filling controls how many plaquettes are assigned +1 flux in fallback
     # flux-based sampling mode.
-    flux_filling = 0.0
+    flux_filling = 0.5
     # even_flip_only=True means only even-sided plaquettes are eligible for +1
     # flux in fallback sampling (triangles remain fixed at -1).
     even_flip_only = True
@@ -438,7 +472,7 @@ def main() -> None:
 
     times = np.linspace(0.0, tmax, Nt)
 
-    avg_absC2_lr, avg_absC2_lt, avg_absC2_ll = disorder_average_three_targets(
+    avg_absC2_lr, avg_absC2_lt, avg_absC2_ll, avg_c_lr, avg_c_lt, avg_c_ll = disorder_average_three_targets(
         times,
         L,
         L2,
@@ -459,24 +493,27 @@ def main() -> None:
     out_csv = Path("avg_absC2_vs_t.csv")
     save_csv_multi(out_csv, times, avg_absC2_lr, avg_absC2_lt, avg_absC2_ll)
 
+    out_csv_complex = Path("avg_C_vs_t.csv")
+    save_csv_complex_multi(out_csv_complex, times, avg_c_lr, avg_c_lt, avg_c_ll)
+
     fig, axes = plt.subplots(3, 1, figsize=(7.2, 7.6), sharex=True)
     axes[0].plot(times, avg_absC2_lr, lw=1.6)
-    axes[0].set_ylabel(r"$\overline{|C_{LR}(t)|^2}$")
+    axes[0].set_ylabel(r"$|\overline{C_{LR}(t)}|^2$")
     axes[0].text(0.01, 0.85, "(a)", transform=axes[0].transAxes)
 
     axes[1].plot(times, avg_absC2_lt, lw=1.6, color="tab:orange")
-    axes[1].set_ylabel(r"$\overline{|C_{LT}(t)|^2}$")
+    axes[1].set_ylabel(r"$|\overline{C_{LT}(t)}|^2$")
     axes[1].text(0.01, 0.85, "(b)", transform=axes[1].transAxes)
 
     axes[2].plot(times, avg_absC2_ll, lw=1.6, color="tab:green")
-    axes[2].set_ylabel(r"$\overline{|C_{LL}(t)|^2}$")
+    axes[2].set_ylabel(r"$|\overline{C_{LL}(t)}|^2$")
     axes[2].set_xlabel("t")
     axes[2].text(0.01, 0.85, "(c)", transform=axes[2].transAxes)
 
     for ax in axes:
         ax.grid(False)
 
-    fig.suptitle("Disorder-averaged correlators", y=0.995)
+    fig.suptitle("Coherently averaged correlators", y=0.995)
     fig.subplots_adjust(hspace=0.18, left=0.14, right=0.97, top=0.95, bottom=0.09)
     fig.savefig("avg_absC2_vs_t.pdf", dpi=300, bbox_inches="tight")
 
@@ -492,7 +529,7 @@ def main() -> None:
     print(f"time_avg_LR[{t1}, {t2}] = {tavg_lr:.8e}")
     print(f"time_avg_LT[{t1}, {t2}] = {tavg_lt:.8e}")
     print(f"time_avg_LL[{t1}, {t2}] = {tavg_ll:.8e}")
-    print(f"saved: {out_csv}, avg_absC2_vs_t.pdf")
+    print(f"saved: {out_csv}, {out_csv_complex}, avg_absC2_vs_t.pdf")
 
 
 if __name__ == "__main__":
