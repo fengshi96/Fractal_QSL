@@ -498,7 +498,19 @@ def get_closest_site_to_center(lattice):
     return closest_site_index
 
 
-def plot_time_slice(lattice, wavefunctions, output_file, target_flux=None, cmap="Purples", vmin=0, vmax=0.01, time_index=None, time_value=None):
+def plot_time_slice(
+    lattice,
+    wavefunctions,
+    output_file,
+    target_flux=None,
+    cmap="Purples",
+    vmin=0,
+    vmax=0.01,
+    time_index=None,
+    time_value=None,
+    size_min=10,
+    size_max=400,
+):
     """
     Plot a single time slice of the wavefunction distribution.
 
@@ -511,6 +523,8 @@ def plot_time_slice(lattice, wavefunctions, output_file, target_flux=None, cmap=
         vmax: Maximum value for colormap normalization.
         time_index: Optional index for the desired time slice.
         time_value: Optional physical time; closest slice will be selected.
+        size_min: Minimum marker size.
+        size_max: Maximum marker size.
     """
     positions = lattice.vertices.positions
     x, y = positions[:, 0], positions[:, 1]
@@ -537,17 +551,25 @@ def plot_time_slice(lattice, wavefunctions, output_file, target_flux=None, cmap=
     sorted_wf = wf[sorted_indices]
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    plot_edges(lattice, color='black', lw=0.5, alpha=0.2)
+    plot_edges(lattice, ax=ax, color='black', lw=0.5, alpha=0.2)
     if target_flux is not None:
         plot_plaquettes(lattice, ax=ax, labels=fluxes_to_labels(target_flux), color_scheme=np.array(['lightgrey','w','deepskyblue', 'wheat']))
+
+    max_wf = np.max(sorted_wf)
+    if max_wf > 0:
+        sizes = size_min + (size_max - size_min) * (sorted_wf / max_wf)
+    else:
+        sizes = np.full_like(sorted_wf, size_min, dtype=float)
 
     scatter = ax.scatter(
         sorted_x, sorted_y,
         c=sorted_wf,
         cmap=cmap,
-        s=100,
+        s=sizes,
         vmin=vmin,
-        vmax=vmax
+        vmax=vmax,
+        edgecolors='none',
+        linewidths=0
     )
     ax.axis("equal")
     ax.axis("off")
@@ -585,7 +607,7 @@ def main(total, cmdargs):
     
     total_plaquettes = len(modified_lattice.plaquettes)
     flux_filling = 0.5
-    even_flip_only = False
+    even_flip_only = True
     if even_flip_only:
         even_plaquettes = sum(
             1 for p in modified_lattice.plaquettes if (len(p.vertices) % 2 == 0)
@@ -622,7 +644,7 @@ def main(total, cmdargs):
     overlaps_mag_sq = np.abs(overlaps)**2
 
 
-    slice_time = 10
+    slice_time = 400
     psi_t = time_evolution(maj_energies, maj_states, perturbed_state, np.array([slice_time]))
 
     print(f"Wavefunctions shape: {psi_t.shape}")
