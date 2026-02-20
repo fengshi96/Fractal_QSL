@@ -87,7 +87,7 @@ def plot_three_panel(
     inset: bool = True,
     inset_t_range: tuple[float, float] = (0.0, 1000.0),
 ):
-    fig, axes = plt.subplots(3, 1, figsize=(6, 4), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(7, 5), sharex=True)
 
     # X-axis calibration: plot time in units of 10^3
     t_plot = t / 1e3
@@ -96,7 +96,7 @@ def plot_three_panel(
 
     # Panel-wise y-axis calibration with a small buffer below 0
     y_min = -0.002
-    y_ticks_a = [0.00, 0.02, 0.04, 0.06]  # shown as 0,2,4,6 x 10^-2
+    y_ticks_a = [0.00, 0.02, 0.04]  # shown as 0,2,4,6 x 10^-2
     y_ticks_b = [0.00, 0.02, 0.04]  # shown as 0,1,3,5 x 10^-2
     y_ticks_c = [0.00, 0.02, 0.04]  # shown as 0,2,4,6 x 10^-2
 
@@ -106,12 +106,12 @@ def plot_three_panel(
         "ll": "#81B29A",  # muted green
     }
 
-    def _apply_sci_y(ax):
+    def _apply_sci_y(ax, *, show_offset: bool = True):
         formatter = ScalarFormatter(useMathText=True)
         formatter.set_scientific(True)
         formatter.set_powerlimits((0, 0))
         ax.yaxis.set_major_formatter(formatter)
-        ax.yaxis.get_offset_text().set_visible(False)
+        ax.yaxis.get_offset_text().set_visible(show_offset)
 
     axes[0].plot(t_plot, lr, lw=1.2, color=colors["lr"])
     axes[0].set_ylabel(r"$|C_{LR}(t)|^2$", fontsize=axis_labelsize)
@@ -122,7 +122,7 @@ def plot_three_panel(
     axes[1].text(0.02, 0.88, "(b)", transform=axes[1].transAxes, ha="left", va="top")
 
     axes[2].plot(t_plot, ll, lw=1.2, color=colors["ll"])
-    axes[2].axhline(0.011, color="black", linestyle="--", linewidth=1.0, alpha=0.8)    # eye-guiding horizontal line for LL panel
+    # axes[2].axhline(0.011, color="black", linestyle="--", linewidth=1.0, alpha=0.8)    # eye-guiding horizontal line for LL panel
     axes[2].set_ylabel(r"$|C_{LL}(t)|^2$", fontsize=axis_labelsize)
     axes[2].set_xlabel(r"$t\,(\times 10^3)$", fontsize=axis_labelsize)
     axes[2].text(0.02, 0.88, "(c)", transform=axes[2].transAxes, ha="left", va="top")
@@ -130,10 +130,9 @@ def plot_three_panel(
         ax.grid(False)
         ax.tick_params(axis="both", labelsize=tick_labelsize)
 
-    axes[0].set_ylim(y_min, 0.062)
+    axes[0].set_ylim(y_min, 0.05)
     axes[0].set_yticks(y_ticks_a)
     _apply_sci_y(axes[0])
-    axes[0].text(0.02, 0.98, r"$\times 10^{2}$", transform=axes[0].transAxes, va="top")
 
     axes[1].set_ylim(y_min, 0.045)
     axes[1].set_yticks(y_ticks_b)
@@ -163,15 +162,15 @@ def plot_three_panel(
                 borderpad=0.0,
             )
             axins.plot(t_plot, y, lw=1.0, color=color)
-            if hline is not None:
-                axins.axhline(hline, color="black", linestyle="--", linewidth=1.0, alpha=0.8)
+            # if hline is not None:
+            #     axins.axhline(hline, color="black", linestyle="--", linewidth=1.0, alpha=0.8)
             axins.set_xlim(t0_plot, t1_plot)
             axins.set_ylim(ax.get_ylim())
             axins.tick_params(axis="x", labelbottom=False, bottom=False)
             axins.set_yticks([0.0, 0.04])
             axins.tick_params(axis="y", labelsize=tick_labelsize)
             axins.grid(False)
-            _apply_sci_y(axins)
+            _apply_sci_y(axins, show_offset=False)
             return axins
 
         axins0 = _add_inset(axes[0], lr, color=colors["lr"])
@@ -197,7 +196,7 @@ def plot_three_panel_ft(
     c_ll_w,
     output_path: Path,
 ):
-    fig, axes = plt.subplots(3, 1, figsize=(2.5, 6), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(2, 5), sharex=True)
 
     tick_labelsize = 14
     axis_labelsize = tick_labelsize
@@ -208,9 +207,15 @@ def plot_three_panel_ft(
         "ll": "#81B29A",
     }
 
-    abs_lr = np.abs(c_lr_w)
-    abs_lt = np.abs(c_lt_w)
-    abs_ll = np.abs(c_ll_w)
+    def _apply_sci_y(ax):
+        formatter = ScalarFormatter(useMathText=True)
+        formatter.set_scientific(True)
+        formatter.set_powerlimits((0, 0))
+        ax.yaxis.set_major_formatter(formatter)
+
+    abs_lr = np.abs(c_lr_w) ** 2
+    abs_lt = np.abs(c_lt_w) ** 2
+    abs_ll = np.abs(c_ll_w) ** 2
 
     axes[0].plot(
         omega,
@@ -222,7 +227,7 @@ def plot_three_panel_ft(
         markeredgewidth=0.8,
         color=colors["lr"],
     )
-    axes[0].set_ylabel(r"$|\tilde{C}_{LR}(\omega)|$", fontsize=axis_labelsize)
+    axes[0].set_ylabel(r"$|C_{LR}(\omega)|^2$", fontsize=axis_labelsize)
     axes[0].text(0.02, 0.88, "(a)", transform=axes[0].transAxes, ha="left", va="top")
 
     axes[1].plot(
@@ -235,7 +240,7 @@ def plot_three_panel_ft(
         markeredgewidth=0.8,
         color=colors["lt"],
     )
-    axes[1].set_ylabel(r"$|\tilde{C}_{LT}(\omega)|$", fontsize=axis_labelsize)
+    axes[1].set_ylabel(r"$|C_{LT}(\omega)|^2$", fontsize=axis_labelsize)
     axes[1].text(0.02, 0.88, "(b)", transform=axes[1].transAxes, ha="left", va="top")
 
     axes[2].plot(
@@ -248,7 +253,7 @@ def plot_three_panel_ft(
         markeredgewidth=0.8,
         color=colors["ll"],
     )
-    axes[2].set_ylabel(r"$|\tilde{C}_{LL}(\omega)|$", fontsize=axis_labelsize)
+    axes[2].set_ylabel(r"$|C_{LL}(\omega)|^2$", fontsize=axis_labelsize)
     axes[2].set_xlabel(r"$\omega$", fontsize=axis_labelsize)
     axes[2].text(0.02, 0.88, "(c)", transform=axes[2].transAxes, ha="left", va="top")
 
@@ -256,6 +261,7 @@ def plot_three_panel_ft(
         ax.grid(False)
         ax.tick_params(axis="both", labelsize=tick_labelsize)
         ax.set_xlim(0.0, 1.5)
+        _apply_sci_y(ax)
 
     for ax in axes[:-1]:
         ax.tick_params(labelbottom=False)
@@ -270,7 +276,7 @@ def main():
     csv_path = Path("avg_absC2_vs_t.csv")
     out_path = Path("avg_absC2_vs_t_from_data.pdf")
     complex_csv_candidates = [Path("avg_C_vs_t.csv"), Path("avg_CLR_vs_t.csv")]
-    ft_out_path = Path("avg_C_vs_omega_from_data.pdf")
+    ft_out_path = Path("avg_absC2_vs_omega_from_data.pdf")
 
     t, lr, lt, ll = read_correlation_csv(csv_path)
     plot_three_panel(t, lr, lt, ll, out_path)
