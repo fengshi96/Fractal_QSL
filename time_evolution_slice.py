@@ -635,8 +635,8 @@ def main(total, cmdargs):
     # assert(1 not in data['fluxes'])
 
     ground_state = np.abs(data['eigenvectors'][:, len(data['eigenvectors'])//2])**2
-    # site_index = get_closest_site_to_center(modified_lattice)
-    site_index = 0
+    site_index = get_closest_site_to_center(modified_lattice)
+    # site_index = 0
     perturbed_state = perturb_ground_state(ground_state, site_index, perturbation_strength=100000000000) #0.3
     print(perturbed_state, max(perturbed_state))
 
@@ -644,7 +644,7 @@ def main(total, cmdargs):
     overlaps_mag_sq = np.abs(overlaps)**2
 
 
-    slice_time = 400
+    slice_time = 40
     psi_t = time_evolution(maj_energies, maj_states, perturbed_state, np.array([slice_time]))
 
     print(f"Wavefunctions shape: {psi_t.shape}")
