@@ -199,8 +199,6 @@ def compute_single_realization(
     even_flip_only: bool,
     seed: int,
     occupied_fraction: float,
-    center_x,
-    center_y,
     crosshair_x,
     crosshair_y,
 ):
@@ -230,12 +228,10 @@ def compute_single_realization(
     positions = lattice.vertices.positions
     auto_center_x = 0.5 * (np.min(positions[:, 0]) + np.max(positions[:, 0]))
     auto_center_y = 0.5 * (np.min(positions[:, 1]) + np.max(positions[:, 1]))
-    selected_center_x = auto_center_x if center_x is None else center_x
-    selected_center_y = auto_center_y if center_y is None else center_y
     crosshair_position = np.array(
         [
-            selected_center_x if crosshair_x is None else crosshair_x,
-            selected_center_y if crosshair_y is None else crosshair_y,
+            auto_center_x if crosshair_x is None else crosshair_x,
+            auto_center_y if crosshair_y is None else crosshair_y,
         ]
     )
 
@@ -315,24 +311,22 @@ def plot_site_marker(
 
 def main():
     lattice_type = "regular"
-    fractal_level = 7
+    fractal_level = 6
     remove_corner = False
     init_length = 5
 
     flux_mode = "random"
-    flux_filling = 0.5
+    flux_filling = 0.0
     even_flip_only = True
     seed = 435
 
     marker = "crosshair"
     occupied_fraction = 0.50
-    center_x = None
-    center_y = None
     crosshair_x = None
-    crosshair_y = None
+    crosshair_y = 0.35
 
     disorder_average = True
-    n_disorder_realizations = 6
+    n_disorder_realizations = 3
 
     show_edges = True
     point_size = 90.0
@@ -367,8 +361,6 @@ def main():
                     even_flip_only=even_flip_only,
                     seed=sample_seed,
                     occupied_fraction=occupied_fraction,
-                    center_x=center_x,
-                    center_y=center_y,
                     crosshair_x=crosshair_x,
                     crosshair_y=crosshair_y,
                 )
@@ -405,8 +397,6 @@ def main():
             even_flip_only=even_flip_only,
             seed=seed,
             occupied_fraction=occupied_fraction,
-            center_x=center_x,
-            center_y=center_y,
             crosshair_x=crosshair_x,
             crosshair_y=crosshair_y,
         )
