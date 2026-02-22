@@ -446,12 +446,16 @@ def plot_site_marker(
         ax.axvline(crosshair_position[0], color="gray", lw=0.8, ls="--", alpha=0.6)
         ax.axhline(crosshair_position[1], color="gray", lw=0.8, ls="--", alpha=0.6)
 
-    cbar = fig.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label(marker_name, fontsize=12)
+    cbar = fig.colorbar(scatter, ax=ax, fraction=0.038, pad=0.03, shrink=0.88)
+    cbar.set_label(marker_name, fontsize=12, fontfamily="serif")
+    plt.rcParams["mathtext.fontset"] = "cm"
     cbar.formatter = ScalarFormatter(useMathText=True)
     cbar.formatter.set_scientific(True)
     cbar.formatter.set_powerlimits((-2, 2))
     cbar.update_ticks()
+    for tick_label in cbar.ax.get_yticklabels():
+        tick_label.set_fontfamily("serif")
+    cbar.ax.yaxis.get_offset_text().set_fontfamily("serif")
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -465,8 +469,8 @@ def plot_site_marker(
 
 
 def main():
-    lattice_type = "regular" # "regular", "amorphous", or "apollonius"
-    fractal_level = 7
+    lattice_type = "apollonius" # "regular", "amorphous", or "apollonius"
+    fractal_level = 1
     remove_corner = False
     open_bc = True  # False: PBC, True: open boundary
     use_pbc_flux_for_open_random = True  # for amorphous/apollonius random runs on OBC
@@ -474,7 +478,7 @@ def main():
 
     flux_mode = "random" # "uniform_minus" or "random"; if set to uniform_minus, overrides disorder parameters and forces all fluxes to -1
     flux_filling = 0.5
-    even_flip_only = False
+    even_flip_only = True
     independent_face_disorder = False
     independent_plus_probability = 0.5
     seed = 4359
@@ -485,7 +489,7 @@ def main():
     crosshair_y = 0.52  # optimal choice: 0.35 for regular Sierpinski, 0.5 for amorphous and apollonius
 
     disorder_average = True
-    n_disorder_realizations = 1
+    n_disorder_realizations = 4
 
     show_edges = True
     point_size = 90.0

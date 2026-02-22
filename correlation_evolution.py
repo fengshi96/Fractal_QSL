@@ -45,7 +45,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from scipy import sparse
@@ -122,7 +122,7 @@ def sample_u(
     rng_seed: int,
     *,
     lattice,
-    flux_filling: float = 0.5,
+    flux_filling: Union[float, str] = 0.5,
     even_flip_only: bool = True,
     unfixed_edge_indices: Optional[Sequence[int]] = None,
     base_ujk: Optional[np.ndarray] = None,
@@ -152,26 +152,42 @@ def sample_u(
         return samples
 
     # Fallback: flux-based sampling from existing project machinery
-    n_plaq = len(lattice.plaquettes)
-    n_flux = int((
-        sum(1 for p in lattice.plaquettes if len(p.vertices) % 2 == 0)
-        if even_flip_only
-        else n_plaq
-    ) * flux_filling)
+    fully_random_mode = isinstance(flux_filling, str)
+    if fully_random_mode:
+        if flux_filling != "fully_random":
+            raise ValueError("flux_filling string must be 'fully_random'")
+    else:
+        if not (0.0 <= float(flux_filling) <= 1.0):
+            raise ValueError("flux_filling must be in [0, 1] when numeric")
+
+        n_plaq = len(lattice.plaquettes)
+        n_flux = int((
+            sum(1 for p in lattice.plaquettes if len(p.vertices) % 2 == 0)
+            if even_flip_only
+            else n_plaq
+        ) * float(flux_filling))
 
     for s in range(num_samples):
-        target_flux = flux_sampler(
-            lattice,
-            n_flux,
-            seed=int(rng.integers(0, 2**31 - 1)),
-            even_flip_only=even_flip_only,
-        )
+        if fully_random_mode:
+            target_flux = rng.choice(np.array([-1, 1], dtype=np.int8), size=len(lattice.plaquettes), replace=True)
+        else:
+            target_flux = flux_sampler(
+                lattice,
+                n_flux,
+                seed=int(rng.integers(0, 2**31 - 1)),
+                even_flip_only=even_flip_only,
+            )
         ujk_init = np.full(lattice.n_edges, -1, dtype=np.int8)
         ujk = ujk_from_fluxes(lattice, target_flux, ujk_init)
         samples.append(
             GaugeSample(
                 ujk=np.asarray(ujk, dtype=np.int8),
-                meta={"mode": "flux", "sample_index": s},
+                meta={
+                    "mode": "flux",
+                    "sample_index": s,
+                    "flux_filling": flux_filling,
+                    "fully_random": fully_random_mode,
+                },
             )
         )
     return samples
@@ -231,6 +247,7 @@ def compute_G_target_for_sector(
     L3: int,
     target: int,
     orientation_flag: int,
+    initial_greens_state: str = "triangular_product",
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute G_target,L(t) and |G_target,L(t)|^2 in one sector.
@@ -238,13 +255,18 @@ def compute_G_target_for_sector(
     orientation_flag = +1 keeps default signs;
     orientation_flag = -1 flips signs of off-diagonal triangle correlators.
     """
-    if orientation_flag not in (+1, -1):
-        raise ValueError("orientation_flag must be ±1")
+    if initial_greens_state not in ("triangular_product", "full_product"):
+        raise ValueError("initial_greens_state must be 'triangular_product' or 'full_product'")
 
-    # Equal-time correlators from chiral triangle preparation
     C_LL = 1.0 + 0.0j
-    C_L2L = orientation_flag * (1j / np.sqrt(3.0))
-    C_L3L = orientation_flag * (-1j / np.sqrt(3.0))
+    if initial_greens_state == "triangular_product":
+        if orientation_flag not in (+1, -1):
+            raise ValueError("orientation_flag must be ±1")
+        C_L2L = orientation_flag * (1j / np.sqrt(3.0))
+        C_L3L = orientation_flag * (-1j / np.sqrt(3.0))
+    else:
+        C_L2L = 0.0 + 0.0j
+        C_L3L = 0.0 + 0.0j
 
     U_tL = _trajectory_dst_from_src(A_u, times, src_index=L, dst_index=target)
     U_tL2 = _trajectory_dst_from_src(A_u, times, src_index=L2, dst_index=target)
@@ -263,9 +285,19 @@ def compute_G_RL_for_sector(
     L3: int,
     R: int,
     orientation_flag: int,
+    initial_greens_state: str = "triangular_product",
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Backward-compatible wrapper for right-corner correlator."""
-    return compute_G_target_for_sector(A_u, times, L, L2, L3, R, orientation_flag)
+    return compute_G_target_for_sector(
+        A_u,
+        times,
+        L,
+        L2,
+        L3,
+        R,
+        orientation_flag,
+        initial_greens_state=initial_greens_state,
+    )
 
 
 def disorder_average_absC2(
@@ -280,25 +312,53 @@ def disorder_average_absC2(
     lattice,
     coloring_solution,
     rng_seed: int = 4434,
-    flux_filling: float = 0.5,
+    flux_filling: Union[float, str] = 0.5,
     even_flip_only: bool = True,
     unfixed_edge_indices: Optional[Sequence[int]] = None,
     progress_every: int = 1,
+    initial_greens_state: str = "triangular_product",
 ) -> np.ndarray:
     """Monte Carlo coherent average: first average C_LR(t), then return |avg C_LR(t)|^2."""
+    effective_even_flip_only = even_flip_only if initial_greens_state == "triangular_product" else False
+    sampling_mode = "link" if unfixed_edge_indices is not None else "flux"
+
+    print("=== disorder_average_absC2 effective inputs ===")
+    print(f"M={M}, rng_seed={rng_seed}, progress_every={progress_every}")
+    print(
+        f"initial_greens_state={initial_greens_state}, orientation_flag={orientation_flag}, "
+        f"sampling_mode={sampling_mode}"
+    )
+    print(
+        f"flux_filling={flux_filling}, even_flip_only_input={even_flip_only}, "
+        f"even_flip_only_effective={effective_even_flip_only}"
+    )
+    if flux_filling == "fully_random":
+        print("fully_random mode active: independent 50/50 plaquette flux; flip controls ignored")
+    if unfixed_edge_indices is not None:
+        print(f"n_unfixed_edge_indices={len(unfixed_edge_indices)}")
+
     samples = sample_u(
         M,
         rng_seed,
         lattice=lattice,
         flux_filling=flux_filling,
-        even_flip_only=even_flip_only,
+        even_flip_only=effective_even_flip_only,
         unfixed_edge_indices=unfixed_edge_indices,
     )
 
     acc_c = np.zeros_like(times, dtype=np.complex128)
     for i, s in enumerate(samples, start=1):
         A_u = build_A_from_ujk(lattice, coloring_solution, s.ujk)
-        G, _ = compute_G_target_for_sector(A_u, times, L, L2, L3, R, orientation_flag)
+        G, _ = compute_G_target_for_sector(
+            A_u,
+            times,
+            L,
+            L2,
+            L3,
+            R,
+            orientation_flag,
+            initial_greens_state=initial_greens_state,
+        )
         # C_LR = i * chi_RL * G_RL with chi_RL = +1
         acc_c += 1j * G
         if progress_every > 0 and (i % progress_every == 0 or i == M):
@@ -370,10 +430,11 @@ def disorder_average_three_targets(
     lattice,
     coloring_solution,
     rng_seed: int = 4434,
-    flux_filling: float = 0.5,
+    flux_filling: Union[float, str] = 0.5,
     even_flip_only: bool = True,
     unfixed_edge_indices: Optional[Sequence[int]] = None,
     progress_every: int = 1,
+    initial_greens_state: str = "triangular_product",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute coherent disorder average for LR/LT/LL:
@@ -381,12 +442,30 @@ def disorder_average_three_targets(
 
     Uses chi = +1 for all three targets.
     """
+    effective_even_flip_only = even_flip_only if initial_greens_state == "triangular_product" else False
+    sampling_mode = "link" if unfixed_edge_indices is not None else "flux"
+
+    print("=== disorder_average_three_targets effective inputs ===")
+    print(f"M={M}, rng_seed={rng_seed}, progress_every={progress_every}")
+    print(
+        f"initial_greens_state={initial_greens_state}, orientation_flag={orientation_flag}, "
+        f"sampling_mode={sampling_mode}"
+    )
+    print(
+        f"flux_filling={flux_filling}, even_flip_only_input={even_flip_only}, "
+        f"even_flip_only_effective={effective_even_flip_only}"
+    )
+    if flux_filling == "fully_random":
+        print("fully_random mode active: independent 50/50 plaquette flux; flip controls ignored")
+    if unfixed_edge_indices is not None:
+        print(f"n_unfixed_edge_indices={len(unfixed_edge_indices)}")
+
     samples = sample_u(
         M,
         rng_seed,
         lattice=lattice,
         flux_filling=flux_filling,
-        even_flip_only=even_flip_only,
+        even_flip_only=effective_even_flip_only,
         unfixed_edge_indices=unfixed_edge_indices,
     )
 
@@ -396,9 +475,36 @@ def disorder_average_three_targets(
 
     for i, s in enumerate(samples, start=1):
         A_u = build_A_from_ujk(lattice, coloring_solution, s.ujk)
-        G_lr, _ = compute_G_target_for_sector(A_u, times, L, L2, L3, R, orientation_flag)
-        G_lt, _ = compute_G_target_for_sector(A_u, times, L, L2, L3, T, orientation_flag)
-        G_ll, _ = compute_G_target_for_sector(A_u, times, L, L2, L3, L, orientation_flag)
+        G_lr, _ = compute_G_target_for_sector(
+            A_u,
+            times,
+            L,
+            L2,
+            L3,
+            R,
+            orientation_flag,
+            initial_greens_state=initial_greens_state,
+        )
+        G_lt, _ = compute_G_target_for_sector(
+            A_u,
+            times,
+            L,
+            L2,
+            L3,
+            T,
+            orientation_flag,
+            initial_greens_state=initial_greens_state,
+        )
+        G_ll, _ = compute_G_target_for_sector(
+            A_u,
+            times,
+            L,
+            L2,
+            L3,
+            L,
+            orientation_flag,
+            initial_greens_state=initial_greens_state,
+        )
 
         # C_target,L = i * chi_target,L * G_target,L, with chi = +1.
         acc_c_lr += 1j * G_lr
@@ -419,7 +525,7 @@ def main() -> None:
     # ===== User-facing settings =====
     # Fractal generation level for regular_Sierpinski(level, ...).
     # Larger level => larger system size and heavier computation.
-    level = 8
+    level = 5
 
     # M = number of disorder/gauge samples in the coherent average.
     # We compute C(t) ≈ (1/M) * sum_{s=1..M} C^{(u_s)}(t), then output |C(t)|^2.
@@ -442,10 +548,15 @@ def main() -> None:
     # -1 -> flip signs of both off-diagonal correlators.
     orientation_flag = +1  # set -1 if your local triangle orientation is opposite
 
+    # Initial equal-time Green's function:
+    # - "triangular_product": existing chiral triangle correlations (default)
+    # - "full_product": only G_LL(0)=1, G_L2L(0)=G_L3L(0)=0
+    initial_greens_state = "full_product"
+
     # Sector sampling controls
     # flux_filling controls how many plaquettes are assigned +1 flux in fallback
     # flux-based sampling mode.
-    flux_filling = 0.5
+    flux_filling: Union[float, str] = "fully_random"  # float or "fully_random"
     # even_flip_only=True means only even-sided plaquettes are eligible for +1
     # flux in fallback sampling (triangles remain fixed at -1).
     even_flip_only = True
@@ -488,6 +599,7 @@ def main() -> None:
         even_flip_only=even_flip_only,
         unfixed_edge_indices=unfixed_edge_indices,
         progress_every=1,
+        initial_greens_state=initial_greens_state,
     )
 
     out_csv = Path("avg_absC2_vs_t.csv")
@@ -525,7 +637,9 @@ def main() -> None:
     print("=== correlation_evolution summary ===")
     print(f"indices: L={L}, L2={L2}, L3={L3}, R={R}, T={T}")
     print(f"M={M}, Nt={Nt}, tmax={tmax}, orientation_flag={orientation_flag}")
-    print(f"sampling: even_flip_only={even_flip_only}, flux_filling={flux_filling}")
+    effective_even_flip_only = even_flip_only if initial_greens_state == "triangular_product" else False
+    print(f"initial_greens_state={initial_greens_state}")
+    print(f"sampling: even_flip_only={effective_even_flip_only}, flux_filling={flux_filling}")
     print(f"time_avg_LR[{t1}, {t2}] = {tavg_lr:.8e}")
     print(f"time_avg_LT[{t1}, {t2}] = {tavg_lt:.8e}")
     print(f"time_avg_LL[{t1}, {t2}] = {tavg_ll:.8e}")
