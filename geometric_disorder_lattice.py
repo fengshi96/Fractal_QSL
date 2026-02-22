@@ -10,7 +10,7 @@ from koala.plotting import plot_edges, plot_plaquettes, plot_vertex_indices
 from koala.graph_color import color_lattice
 from koala.flux_finder import fluxes_from_ujk, fluxes_to_labels, ujk_from_fluxes
 import koala.hamiltonian as ham
-from koala.lattice import Lattice
+from koala.lattice import Lattice, cut_boundaries
 from koala import chern_number as cn
 from matplotlib.colors import TwoSlopeNorm
 from scipy.stats import gaussian_kde
@@ -236,9 +236,11 @@ def iterative_fractal_disorder(lattice, n_iterations):
     return lattice
 
 
-def regular_apollonius(init_length=2, fractal_level=1):
+def regular_apollonius(init_length=2, fractal_level=1, open_bc=False):
     lattice = honeycomb_lattice(init_length, return_coloring=False)
     modified_lattice = iterative_fractal_disorder(lattice, fractal_level)
+    if open_bc:
+        modified_lattice = cut_boundaries(modified_lattice)
     color_solution = color_lattice(modified_lattice)
     return modified_lattice, color_solution
 
@@ -254,7 +256,7 @@ def main(total, cmdargs):
     # modified_lattice, coloring_solution = honeycomb_lattice(20, return_coloring=True)
     n_iterations = 0   # 1 is a triangle
     
-    modified_lattice, color_solution = regular_apollonius(10, fractal_level=0)
+    modified_lattice, color_solution = regular_apollonius(10, fractal_level=0, open_bc=False)
     
     # modified_lattice = iterative_geometric_disorder(modified_lattice, n_iterations, batch_size=20, alpha = 5)
     # modified_lattice = iterative_fractal_disorder(modified_lattice, n_iterations)

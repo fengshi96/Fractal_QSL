@@ -117,33 +117,94 @@ def flux_sampler(modified_lattice, num_fluxes: int, seed: int | None = None, eve
     return target_flux
 
 
-def build_lattice(lattice_type: str, fractal_level: int, remove_corner: bool, seed: int, init_length: int):
+def independent_flux_sampler(
+    modified_lattice,
+    plus_probability: float,
+    seed: int | None = None,
+    even_flip_only: bool = False,
+):
+    if not (0.0 <= plus_probability <= 1.0):
+        raise ValueError("plus_probability must be in [0, 1]")
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    num_plaquettes = len(modified_lattice.plaquettes)
+    target_flux = np.full(num_plaquettes, -1, dtype=np.int8)
+
+    if even_flip_only:
+        eligible_indices = [
+            i for i, p in enumerate(modified_lattice.plaquettes) if (len(p.vertices) % 2 == 0)
+        ]
+    else:
+        eligible_indices = list(range(num_plaquettes))
+
+    if len(eligible_indices) == 0:
+        return target_flux
+
+    random_draws = np.random.random(len(eligible_indices))
+    chosen = np.array(eligible_indices, dtype=int)[random_draws < plus_probability]
+    target_flux[chosen] = 1
+    return target_flux
+
+
+def build_lattice(
+    lattice_type: str,
+    fractal_level: int,
+    remove_corner: bool,
+    seed: int,
+    init_length: int,
+    open_bc: bool,
+):
     if lattice_type == "regular":
         return regular_sierpinski(fractal_level=fractal_level, remove_corner=remove_corner)
 
     if lattice_type == "amorphous":
         from hamil import amorphous_Sierpinski
 
+        if init_length < 1:
+            raise ValueError("init_length must be >= 1 for amorphous lattice")
+
         return amorphous_Sierpinski(
             Seed=seed,
-            init_points=3,
+            init_points=init_length,
             fractal_level=fractal_level,
-            open_bc=False,
+            open_bc=open_bc,
         )
 
     if lattice_type == "apollonius":
         from geometric_disorder_lattice import regular_apollonius
 
-        return regular_apollonius(init_length=init_length, fractal_level=fractal_level)
+        return regular_apollonius(
+            init_length=init_length,
+            fractal_level=fractal_level,
+            open_bc=open_bc,
+        )
 
     raise ValueError(f"Unsupported lattice_type: {lattice_type}")
 
 
-def make_target_flux(lattice, flux_mode: str, flux_filling: float, seed: int, even_flip_only: bool):
+def make_target_flux(
+    lattice,
+    flux_mode: str,
+    flux_filling: float,
+    seed: int,
+    even_flip_only: bool,
+    independent_face_disorder: bool,
+    independent_plus_probability: float,
+):
     n_plaquettes = len(lattice.plaquettes)
 
     if flux_mode == "uniform_minus":
         return np.array([-1 for _ in lattice.plaquettes], dtype=np.int8)
+
+    if independent_face_disorder:
+        return independent_flux_sampler(
+            modified_lattice=lattice,
+            plus_probability=independent_plus_probability,
+            seed=seed,
+            even_flip_only=even_flip_only,
+        )
 
     if flux_mode == "random":
         if not (0.0 <= flux_filling <= 1.0):
@@ -193,10 +254,13 @@ def compute_single_realization(
     lattice_type: str,
     fractal_level: int,
     remove_corner: bool,
+    open_bc: bool,
     init_length: int,
     flux_mode: str,
     flux_filling: float,
     even_flip_only: bool,
+    independent_face_disorder: bool,
+    independent_plus_probability: float,
     seed: int,
     occupied_fraction: float,
     crosshair_x,
@@ -208,6 +272,7 @@ def compute_single_realization(
         remove_corner=remove_corner,
         seed=seed,
         init_length=init_length,
+        open_bc=open_bc,
     )
 
     target_flux = make_target_flux(
@@ -216,7 +281,11 @@ def compute_single_realization(
         flux_filling=flux_filling,
         seed=seed,
         even_flip_only=even_flip_only,
+        independent_face_disorder=independent_face_disorder,
+        independent_plus_probability=independent_plus_probability,
     )
+
+    print(f"Total lattice sites: {lattice.n_vertices}")
 
     projector, energies = build_projector(
         lattice=lattice,
@@ -238,7 +307,7 @@ def compute_single_realization(
     crosshair_values = cn.crosshair_marker(lattice, projector, crosshair_position)
     chern_values = cn.chern_marker(lattice, projector)
 
-    return lattice, crosshair_position, crosshair_values, chern_values, energies
+    return lattice, crosshair_position, crosshair_values, chern_values, energies, target_flux
 
 
 def plot_site_marker(
@@ -310,15 +379,18 @@ def plot_site_marker(
 
 
 def main():
-    lattice_type = "regular"
-    fractal_level = 6
+    lattice_type = "apollonius" # "regular", "amorphous", or "apollonius"
+    fractal_level = 1
     remove_corner = False
-    init_length = 5
+    open_bc = True  # False: PBC, True: open boundary
+    init_length = 30
 
-    flux_mode = "random"
+    flux_mode = "uniform_minus" # "uniform_minus" or "random"
     flux_filling = 0.0
     even_flip_only = True
-    seed = 435
+    independent_face_disorder = True
+    independent_plus_probability = 0.5
+    seed = 4359
 
     marker = "crosshair"
     occupied_fraction = 0.50
@@ -326,7 +398,7 @@ def main():
     crosshair_y = 0.35
 
     disorder_average = True
-    n_disorder_realizations = 3
+    n_disorder_realizations = 300
 
     show_edges = True
     point_size = 90.0
@@ -336,7 +408,14 @@ def main():
     cmap_vmax = 0.01
     output = "chern_local_marker.png"
 
-    if disorder_average:
+    use_uniform_minus = (flux_mode == "uniform_minus")
+    use_disorder_average = disorder_average and (not use_uniform_minus)
+    effective_independent_face_disorder = independent_face_disorder and (not use_uniform_minus)
+
+    if use_uniform_minus:
+        print("flux_mode='uniform_minus': skipping disorder averaging and disorder parameters.")
+
+    if use_disorder_average:
         if n_disorder_realizations < 1:
             raise ValueError("n_disorder_realizations must be >= 1 when disorder_average is True")
 
@@ -345,20 +424,24 @@ def main():
         lattice = None
         crosshair_position = None
         energies = None
+        realized_plus_fractions = []
 
         for sample_idx in range(n_disorder_realizations):
             sample_seed = seed + sample_idx
             print(f"Processing sample {sample_idx + 1}/{n_disorder_realizations} (seed={sample_seed})")
 
-            sample_lattice, sample_crosshair_pos, sample_crosshair, sample_chern, sample_energies = (
+            sample_lattice, sample_crosshair_pos, sample_crosshair, sample_chern, sample_energies, sample_flux = (
                 compute_single_realization(
                     lattice_type=lattice_type,
                     fractal_level=fractal_level,
                     remove_corner=remove_corner,
+                    open_bc=open_bc,
                     init_length=init_length,
                     flux_mode=flux_mode,
                     flux_filling=flux_filling,
                     even_flip_only=even_flip_only,
+                    independent_face_disorder=effective_independent_face_disorder,
+                    independent_plus_probability=independent_plus_probability,
                     seed=sample_seed,
                     occupied_fraction=occupied_fraction,
                     crosshair_x=crosshair_x,
@@ -381,25 +464,33 @@ def main():
 
             accumulated_crosshair += sample_crosshair
             accumulated_chern += sample_chern
+            realized_plus_fractions.append(np.mean(sample_flux == 1))
 
         crosshair_values = accumulated_crosshair / n_disorder_realizations
         chern_values = accumulated_chern / n_disorder_realizations
         crosshair_values = np.real_if_close(crosshair_values)
         chern_values = np.real_if_close(chern_values)
+        realized_plus_fraction_mean = float(np.mean(realized_plus_fractions))
+        realized_plus_fraction_std = float(np.std(realized_plus_fractions))
     else:
-        lattice, crosshair_position, crosshair_values, chern_values, energies = compute_single_realization(
+        lattice, crosshair_position, crosshair_values, chern_values, energies, target_flux = compute_single_realization(
             lattice_type=lattice_type,
             fractal_level=fractal_level,
             remove_corner=remove_corner,
+            open_bc=open_bc,
             init_length=init_length,
             flux_mode=flux_mode,
             flux_filling=flux_filling,
             even_flip_only=even_flip_only,
+            independent_face_disorder=effective_independent_face_disorder,
+            independent_plus_probability=independent_plus_probability,
             seed=seed,
             occupied_fraction=occupied_fraction,
             crosshair_x=crosshair_x,
             crosshair_y=crosshair_y,
         )
+        realized_plus_fraction_mean = float(np.mean(target_flux == 1))
+        realized_plus_fraction_std = 0.0
 
     if marker == "crosshair":
         marker_values = crosshair_values
@@ -423,10 +514,27 @@ def main():
     )
 
     print(f"Lattice vertices: {lattice.n_vertices}, plaquettes: {len(lattice.plaquettes)}")
+    if lattice_type in {"amorphous", "apollonius"}:
+        print(f"Boundary condition: {'open' if open_bc else 'PBC'}")
     print(f"Crosshair position: ({crosshair_position[0]:.6f}, {crosshair_position[1]:.6f})")
-    print(f"Disorder average: {disorder_average}")
-    if disorder_average:
+    print(f"Disorder average: {use_disorder_average}")
+    if use_disorder_average:
         print(f"Number of disorder realizations: {n_disorder_realizations}")
+    if use_uniform_minus:
+        print("Flux configuration: uniform -1 on all plaquettes")
+    else:
+        print(f"Independent face disorder override: {effective_independent_face_disorder}")
+        if effective_independent_face_disorder:
+            print(f"Independent +1 probability (eligible plaquettes): {independent_plus_probability:.4f}")
+        else:
+            print(f"Flux filling (random mode): {flux_filling:.4f}")
+    if use_disorder_average:
+        print(
+            f"Realized +1 plaquette fraction over samples: "
+            f"{realized_plus_fraction_mean:.4f} ± {realized_plus_fraction_std:.4f}"
+        )
+    elif flux_mode != "uniform_minus":
+        print(f"Realized +1 plaquette fraction: {realized_plus_fraction_mean:.4f}")
     print(f"Crosshair marker sum: {np.sum(crosshair_values).real:.8f}")
     print(f"Local Chern marker sum: {np.sum(chern_values).real:.8f}")
     print(f"Min energy: {np.min(energies):.8f}, Max energy: {np.max(energies):.8f}")
