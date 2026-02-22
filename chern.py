@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.linalg
 from matplotlib.colors import TwoSlopeNorm
+from matplotlib.ticker import ScalarFormatter
 
 import koala.hamiltonian as ham
 from koala import chern_number as cn
@@ -12,6 +13,44 @@ from koala.flux_finder import ujk_from_fluxes
 from koala.graph_color import color_lattice
 from koala.lattice import Lattice
 from koala.plotting import plot_edges
+
+
+def edge_pairs(lattice) -> np.ndarray:
+    if hasattr(lattice, "edges") and hasattr(lattice.edges, "indices"):
+        edge_indices = np.asarray(lattice.edges.indices)
+    elif hasattr(lattice, "edge_indices"):
+        edge_indices = np.asarray(lattice.edge_indices)
+    else:
+        raise RuntimeError("Could not find edge indices on lattice object")
+
+    return np.sort(edge_indices, axis=1)
+
+
+def transfer_ujk_to_target_lattice(reference_lattice, reference_ujk, target_lattice):
+    reference_edges = edge_pairs(reference_lattice)
+    target_edges = edge_pairs(target_lattice)
+
+    reference_map = {
+        tuple(reference_edges[i].tolist()): reference_ujk[i] for i in range(len(reference_edges))
+    }
+
+    target_ujk = np.empty(target_lattice.n_edges, dtype=reference_ujk.dtype)
+    missing_count = 0
+
+    for i, edge in enumerate(target_edges):
+        edge_key = tuple(edge.tolist())
+        if edge_key not in reference_map:
+            missing_count += 1
+        else:
+            target_ujk[i] = reference_map[edge_key]
+
+    if missing_count > 0:
+        raise RuntimeError(
+            "Failed to transfer PBC bond configuration to OBC lattice: "
+            f"{missing_count} OBC edges were not found in the PBC edge set"
+        )
+
+    return target_ujk
 
 
 def sierpinskicoor(n: int) -> np.ndarray:
@@ -226,12 +265,17 @@ def make_target_flux(
     raise ValueError(f"Unsupported flux_mode: {flux_mode}")
 
 
-def build_projector(lattice, coloring_solution, target_flux, occupied_fraction: float):
+def build_projector(lattice, coloring_solution, target_flux, occupied_fraction: float, ujk_override=None):
     if not (0.0 < occupied_fraction <= 1.0):
         raise ValueError("occupied_fraction must be in (0, 1]")
 
-    ujk_init = np.full(lattice.n_edges, -1)
-    ujk = ujk_from_fluxes(lattice, target_flux, ujk_init)
+    if ujk_override is None:
+        ujk_init = np.full(lattice.n_edges, -1)
+        ujk = ujk_from_fluxes(lattice, target_flux, ujk_init)
+    else:
+        if len(ujk_override) != lattice.n_edges:
+            raise ValueError("Length of ujk_override must match lattice.n_edges")
+        ujk = ujk_override
 
     if coloring_solution is not None:
         maj_ham = ham.majorana_hamiltonian(lattice, coloring_solution, ujk)
@@ -261,6 +305,7 @@ def compute_single_realization(
     even_flip_only: bool,
     independent_face_disorder: bool,
     independent_plus_probability: float,
+    use_pbc_flux_for_open_random: bool,
     seed: int,
     occupied_fraction: float,
     crosshair_x,
@@ -275,23 +320,60 @@ def compute_single_realization(
         open_bc=open_bc,
     )
 
-    target_flux = make_target_flux(
-        lattice=lattice,
-        flux_mode=flux_mode,
-        flux_filling=flux_filling,
-        seed=seed,
-        even_flip_only=even_flip_only,
-        independent_face_disorder=independent_face_disorder,
-        independent_plus_probability=independent_plus_probability,
+    use_pbc_assignment = (
+        use_pbc_flux_for_open_random
+        and open_bc
+        and lattice_type in {"amorphous", "apollonius"}
+        and flux_mode != "uniform_minus"
     )
 
-    print(f"Total lattice sites: {lattice.n_vertices}")
+    if use_pbc_assignment:
+        reference_lattice, _ = build_lattice(
+            lattice_type=lattice_type,
+            fractal_level=fractal_level,
+            remove_corner=remove_corner,
+            seed=seed,
+            init_length=init_length,
+            open_bc=False,
+        )
+        reference_flux = make_target_flux(
+            lattice=reference_lattice,
+            flux_mode=flux_mode,
+            flux_filling=flux_filling,
+            seed=seed,
+            even_flip_only=even_flip_only,
+            independent_face_disorder=independent_face_disorder,
+            independent_plus_probability=independent_plus_probability,
+        )
+        ujk_init_reference = np.full(reference_lattice.n_edges, -1)
+        ujk_reference = ujk_from_fluxes(reference_lattice, reference_flux, ujk_init_reference)
+        ujk_for_lattice = transfer_ujk_to_target_lattice(
+            reference_lattice=reference_lattice,
+            reference_ujk=ujk_reference,
+            target_lattice=lattice,
+        )
+        target_flux = reference_flux
+        print("Using PBC-derived random bond assignment on OBC lattice")
+    else:
+        target_flux = make_target_flux(
+            lattice=lattice,
+            flux_mode=flux_mode,
+            flux_filling=flux_filling,
+            seed=seed,
+            even_flip_only=even_flip_only,
+            independent_face_disorder=independent_face_disorder,
+            independent_plus_probability=independent_plus_probability,
+        )
+        ujk_for_lattice = None
+
+    print(f"Total lattice sites (before wavefunction computation): {lattice.n_vertices}")
 
     projector, energies = build_projector(
         lattice=lattice,
         coloring_solution=coloring_solution,
         target_flux=target_flux,
         occupied_fraction=occupied_fraction,
+        ujk_override=ujk_for_lattice,
     )
 
     positions = lattice.vertices.positions
@@ -366,6 +448,10 @@ def plot_site_marker(
 
     cbar = fig.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label(marker_name, fontsize=12)
+    cbar.formatter = ScalarFormatter(useMathText=True)
+    cbar.formatter.set_scientific(True)
+    cbar.formatter.set_powerlimits((-2, 2))
+    cbar.update_ticks()
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -379,33 +465,34 @@ def plot_site_marker(
 
 
 def main():
-    lattice_type = "apollonius" # "regular", "amorphous", or "apollonius"
-    fractal_level = 1
+    lattice_type = "regular" # "regular", "amorphous", or "apollonius"
+    fractal_level = 7
     remove_corner = False
     open_bc = True  # False: PBC, True: open boundary
-    init_length = 30
+    use_pbc_flux_for_open_random = True  # for amorphous/apollonius random runs on OBC
+    init_length = 20
 
-    flux_mode = "uniform_minus" # "uniform_minus" or "random"
-    flux_filling = 0.0
-    even_flip_only = True
-    independent_face_disorder = True
+    flux_mode = "random" # "uniform_minus" or "random"; if set to uniform_minus, overrides disorder parameters and forces all fluxes to -1
+    flux_filling = 0.5
+    even_flip_only = False
+    independent_face_disorder = False
     independent_plus_probability = 0.5
     seed = 4359
 
-    marker = "crosshair"
+    marker = "chern_values" # "crosshair" or "chern_values"
     occupied_fraction = 0.50
-    crosshair_x = None
-    crosshair_y = 0.35
+    crosshair_x = 0.485 # optimal choice: None for regular Sierpinski, 0.485 for amorphous and apollonius
+    crosshair_y = 0.52  # optimal choice: 0.35 for regular Sierpinski, 0.5 for amorphous and apollonius
 
     disorder_average = True
-    n_disorder_realizations = 300
+    n_disorder_realizations = 1
 
     show_edges = True
     point_size = 90.0
     alpha = 0.99
     cmap = "bwr"
-    cmap_vmin = -0.01
-    cmap_vmax = 0.01
+    cmap_vmin = -0.01/10
+    cmap_vmax = 0.01/10
     output = "chern_local_marker.png"
 
     use_uniform_minus = (flux_mode == "uniform_minus")
@@ -442,6 +529,7 @@ def main():
                     even_flip_only=even_flip_only,
                     independent_face_disorder=effective_independent_face_disorder,
                     independent_plus_probability=independent_plus_probability,
+                    use_pbc_flux_for_open_random=use_pbc_flux_for_open_random,
                     seed=sample_seed,
                     occupied_fraction=occupied_fraction,
                     crosshair_x=crosshair_x,
@@ -484,6 +572,7 @@ def main():
             even_flip_only=even_flip_only,
             independent_face_disorder=effective_independent_face_disorder,
             independent_plus_probability=independent_plus_probability,
+            use_pbc_flux_for_open_random=use_pbc_flux_for_open_random,
             seed=seed,
             occupied_fraction=occupied_fraction,
             crosshair_x=crosshair_x,
@@ -516,6 +605,10 @@ def main():
     print(f"Lattice vertices: {lattice.n_vertices}, plaquettes: {len(lattice.plaquettes)}")
     if lattice_type in {"amorphous", "apollonius"}:
         print(f"Boundary condition: {'open' if open_bc else 'PBC'}")
+        print(
+            "PBC-derived random assignment on OBC: "
+            f"{use_pbc_flux_for_open_random and open_bc and flux_mode != 'uniform_minus'}"
+        )
     print(f"Crosshair position: ({crosshair_position[0]:.6f}, {crosshair_position[1]:.6f})")
     print(f"Disorder average: {use_disorder_average}")
     if use_disorder_average:
